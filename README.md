@@ -1,10 +1,10 @@
 # GeoAI Studio
 
-**Interactive geospatial web explorer — v0.3.0**
+**Interactive geospatial web explorer — v0.4.0**
 
 [![Website](https://img.shields.io/badge/Live%20demo-GitHub%20Pages-0ea5e9)](https://umi156.github.io/geoai-studio/)
 
-GeoAI Studio is a **browser-based GIS explorer** that combines an automatically prepared Berlin reference dataset with **user-selected, on-demand OpenStreetMap building data**. It is built with React, TypeScript, MapLibre GL JS and a small Python geospatial acquisition pipeline.
+GeoAI Studio is a **browser-based GIS explorer** that analyzes an automatically prepared Berlin reference dataset directly in the browser, with **optional** user-triggered OpenStreetMap queries. It is built with React, TypeScript, MapLibre GL JS and a small Python geospatial acquisition pipeline.
 
 > **Data honesty:** Neither ALKIS nor OpenStreetMap footprints are AI predictions. This release does not perform neural-network inference, real-time satellite-image acquisition, or arbitrary country-wide processing. The public Overpass API is best-effort and has no SLA.
 
@@ -12,10 +12,10 @@ GeoAI Studio is a **browser-based GIS explorer** that combines an automatically 
 
 - Interactive aerial map, with a visible boundary identifying the limited Berlin orthophoto coverage.
 - Official ALKIS Berlin building footprints, area calculations, click-to-inspect, hover tooltips, filters and GeoJSON export.
-- **Draw a new area of interest** by choosing two opposite map corners (also works on touch devices).
-- Explicitly fetch **OpenStreetMap building ways** for the selected area, without manually uploading files.
+- **Draw a new area of interest** by choosing two opposite map corners. The bundled ALKIS data is analyzed instantly, with no network request.
+- Optionally request **OpenStreetMap building ways** for the selected area. Public Overpass services may time out; this is not required for the offline analysis features.
 - Switch between official Berlin reference data and separately attributed OSM community data.
-- Recomputed KPIs, area-distribution charts, IDs and attributes based on the active dataset.
+- Three spatial scopes (full loaded dataset, drawn AOI, or current map viewport), with consistent maps, KPI totals, area histogram and CSV/GeoJSON exports.
 - Clear data-origin labels, loading and error states, request cancellation and bounded server requests.
 - Responsive dashboard, collapsible sidebar and map expansion.
 - Free hosting with GitHub Pages; no GPU, backend or paid provider is needed.
@@ -37,8 +37,10 @@ OSM buildings returned by a bounding-box query may partly lie beyond the selecte
 2. Explore and inspect the default Berlin ALKIS reference buildings.
 3. Click **Draw AOI** (or **Draw rectangle** in the right panel).
 4. Click one corner on the map; move the cursor and click the opposite corner.
-5. Review the selected size, then click **Fetch OSM buildings**.
-6. Inspect, filter and export the selected dataset. Use **Return to Berlin ALKIS** to restore the reference view.
+5. The selected rectangle immediately filters the available building polygons, counts, area metrics, chart and exports—without contacting Overpass.
+6. Optionally click **Fetch extra OSM buildings** to request additional, independently attributed community data. This may time out or return no data.
+7. Use **Analysis extent → Current map view** to analyze mapped features as you pan, then export matching GeoJSON or CSV. Use **Full available dataset** to reset.
+8. Use **Return to Berlin ALKIS** to restore the bundled reference view after a successful OSM query.
 
 **Safety limits:** AOI ≤ 0.5 km² and ≤ 1 km along either side; up to 5 MB response data and 2,500 OSM features. The browser sends the selected geographic coordinates directly to the third-party Overpass API only when the visitor clicks Fetch; there is no automatic request on pan or zoom. A failed live request does not replace the working Berlin dataset.
 
@@ -51,7 +53,10 @@ src/services/overpass.ts     Bounded live OSM service adapter and geometry utili
 src/types.ts                 Data types
 src/styles.css               UI design and responsive styling
 scripts/fetch_berlin.py      Small bounded WMS/WFS acquisition for demo assets
-tests/aoi.test.mjs           Offline AOI / Overpass shape tests
+src/services/spatial.ts      Browser-side polygon-to-rectangle intersection
+src/services/export.ts       Safe CSV output
+tests/aoi.test.mjs          Offline AOI / Overpass shape tests
+tests/spatial.test.mjs      Offline scope/filter/export tests
 tests/test_fetch_berlin.py   Offline Python GIS tests
 .github/workflows/pages.yml  Tests, geodata fetch, build and Pages deployment
 ```
@@ -76,6 +81,14 @@ The app relies on generated assets under `public/data/`, which are created by th
 ## Deployment
 
 On pushes to `main`, GitHub Actions tests the Python GIS utilities, retrieves Berlin reference data, installs frontend dependencies, runs AOI tests, builds the site and deploys `dist/` through GitHub Pages. In repository Settings → Pages, select **GitHub Actions** as the build source.
+
+## v0.4 geospatial accuracy
+
+- Features are counted when their polygons intersect the chosen rectangle or map viewport (rather than merely comparing bounding boxes). The geometry is not clipped.
+- Area totals **sum complete source feature footprint areas**, even for features partly outside the selection. They are *not* clipped-area measurements or percentage-of-AOI coverage.
+- Berlin ALKIS areas originate from projected geometry in EPSG:25833. OSM areas are approximate and separately attributed.
+- Drawing an AOI anywhere outside the bundled Berlin sample cannot create new building data offline; the app reports no matching *loaded* features, not an absence of actual buildings.
+- The map viewport filter refreshes on `moveend`. If live Overpass fails, the bundled ALKIS analysis remains functional.
 
 ## Limitations and engineering roadmap
 

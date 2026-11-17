@@ -22,3 +22,23 @@
 
 - Implemented automated small-area Berlin WMS/WFS acquisition.
 - Added MapLibre-based React GIS dashboard and GitHub Pages deployment.
+
+## [0.4.0] — 2026-11-17
+
+### Added
+- Offline-first **spatial analysis scope**: full downloaded dataset, drawn AOI, or current map viewport.
+- Local polygon/rectangle intersection supporting Polygon, MultiPolygon and interior holes; bounding-box reject before detailed intersection.
+- Map, KPI counts, area histogram and exports use the same matching feature subset.
+- CSV download with spreadsheet formula-injection protection; GeoJSON export records its spatial scope and provenance.
+- Tests for geometry intersections, filtering and safe CSV serialization.
+
+### Changed
+- Drawing an AOI immediately analyzes already downloaded features without an Overpass call.
+- Public OSM/Overpass retrieval remains optional, experimental and subject to third-party rate limits.
+- Added explicit warning that all summed areas are **full footprint areas of intersecting features**, not areas clipped by the selection.
+- Retained the v0.3.1 manual Overpass provider selection; retained the missing MapLibre `LngLatBounds` import fix.
+
+### Limitations
+- Offline analysis applies only to the bundled Berlin ALKIS sample or previously loaded OSM features; it does **not** download new buildings outside this coverage.
+- Map view statistics update on map movement completion, not continuously during panning.
+- The production Vite build must be verified on GitHub Actions; package installation was unavailable in the offline build environment.

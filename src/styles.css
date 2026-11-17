@@ -62,3 +62,17 @@
 .aoi-service-control select:focus-visible{outline:2px solid #48c3d5;outline-offset:2px}
 .aoi-service-control select:disabled{opacity:.65}
 .aoi-service-control small{font-size:10px;line-height:1.5;color:#9dbccd}
+
+/* v0.4: trustworthy offline-first polygon analytics and responsive export actions */
+.export-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.spatial-panel{border-color:#39687a;background:linear-gradient(145deg,#152f41,#102638)}
+.spatial-panel .panel-title{margin-bottom:8px}
+.spatial-label{display:block;margin:10px 0 5px;font-size:11px;font-weight:700;color:#c7e3ee}
+.spatial-panel select{width:100%;min-height:39px;background:#0e2638;border:1px solid #496d82;border-radius:7px;color:#e8f6fc;padding:9px;font-size:12px}
+.spatial-panel select:focus-visible{outline:2px solid #5ccce3;outline-offset:2px}
+.scope-summary{display:grid;gap:5px;padding:12px;margin-top:12px;background:#183848;border:1px solid #3a6175;border-radius:9px}
+.scope-summary strong{font-size:17px;color:#e2f5fc}
+.scope-summary span,.scope-explainer{font-size:11px;color:#a7c8d9;line-height:1.5}
+.scope-explainer{display:block;margin-top:10px}
+.scope-warning{font-size:11px;line-height:1.6;color:#f7cd9f;background:#372f28;border:1px solid #796148;border-radius:7px;padding:10px}
+@media(max-width:650px){.export-actions{width:100%}.export-actions .outline-btn{flex:1;justify-content:center}}

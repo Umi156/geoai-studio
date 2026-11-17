@@ -49,12 +49,13 @@ type Props = {
   onAoiChange: (bounds: AoiBounds) => void;
   onCancelDrawing: () => void;
   onSelect: (feature: BuildingFeature | null) => void;
+  onBoundsChange: (bounds: AoiBounds) => void;
 };
 
 export default function GeoMap({
   meta, buildings, showOrthophoto, showBuildings, opacity, minArea, selectedId,
   resetToken, focusToken, expanded, sourceMode, aoi, drawingAoi,
-  onAoiChange, onCancelDrawing, onSelect,
+  onAoiChange, onCancelDrawing, onSelect, onBoundsChange,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Map | null>(null);
@@ -63,12 +64,12 @@ export default function GeoMap({
   const buildingRef = useRef(buildings);
   const aoiRef = useRef(aoi);
   const drawingRef = useRef(drawingAoi);
-  const handlersRef = useRef({ onSelect, onAoiChange, onCancelDrawing });
+  const handlersRef = useRef({ onSelect, onAoiChange, onCancelDrawing, onBoundsChange });
   const settingsRef = useRef({ showOrthophoto, showBuildings, opacity, minArea, selectedId, sourceMode });
   buildingRef.current = buildings;
   aoiRef.current = aoi;
   drawingRef.current = drawingAoi;
-  handlersRef.current = { onSelect, onAoiChange, onCancelDrawing };
+  handlersRef.current = { onSelect, onAoiChange, onCancelDrawing, onBoundsChange };
   settingsRef.current = { showOrthophoto, showBuildings, opacity, minArea, selectedId, sourceMode };
 
   useEffect(() => {
@@ -94,6 +95,11 @@ export default function GeoMap({
     };
     window.addEventListener('keydown', stopDrawing);
 
+    const notifyViewport = () => {
+      const b = map.getBounds();
+      handlersRef.current.onBoundsChange({ west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() });
+    };
+    map.on('moveend', notifyViewport);
     map.on('load', () => {
       const settings = settingsRef.current;
       map.addSource('aerial', {
@@ -140,6 +146,7 @@ export default function GeoMap({
         paint: { 'line-color': '#ffde59', 'line-width': 4 },
       });
       fitImage(map, meta);
+      notifyViewport();
       let hovered: number | null = null;
       map.on('mousemove', 'buildings-fill', e => {
         if (drawingRef.current) return;
