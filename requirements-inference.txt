@@ -1,0 +1,8 @@
+# Optional only; NOT used in GitHub Pages deployment.
+-r requirements.txt
+numpy>=1.26,<3
+Pillow>=10,<13
+rasterio>=1.4,<2
+huggingface_hub>=0.29,<2
+segmentation-models-pytorch>=0.4,<1
+# Install a CPU or CUDA build of torch separately from the official PyTorch instructions.

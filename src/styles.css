@@ -76,3 +76,9 @@
 .scope-explainer{display:block;margin-top:10px}
 .scope-warning{font-size:11px;line-height:1.6;color:#f7cd9f;background:#372f28;border:1px solid #796148;border-radius:7px;padding:10px}
 @media(max-width:650px){.export-actions{width:100%}.export-actions .outline-btn{flex:1;justify-content:center}}
+
+/* Independent model output and provenance */
+.prediction-status { background: #fb923c !important; }
+.prediction-warning { font-size: 11px; line-height: 1.55; color: #c3cbd6; padding: 10px 0 0; margin: 0; }
+.prediction-warning a { color: #ffb77d; text-decoration: underline; }
+.prediction-swatch { display: inline-block; width: 10px; height: 10px; border: 2px dashed #fb923c; margin-right: 5px; }

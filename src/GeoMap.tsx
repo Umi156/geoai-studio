@@ -35,6 +35,8 @@ function fitImage(map: Map, meta: DatasetMeta, duration = 0) {
 type Props = {
   meta: DatasetMeta;
   buildings: BuildingCollection;
+  predictions: BuildingCollection | null;
+  showPredictions: boolean;
   showOrthophoto: boolean;
   showBuildings: boolean;
   opacity: number;
@@ -53,7 +55,7 @@ type Props = {
 };
 
 export default function GeoMap({
-  meta, buildings, showOrthophoto, showBuildings, opacity, minArea, selectedId,
+  meta, buildings, predictions, showPredictions, showOrthophoto, showBuildings, opacity, minArea, selectedId,
   resetToken, focusToken, expanded, sourceMode, aoi, drawingAoi,
   onAoiChange, onCancelDrawing, onSelect, onBoundsChange,
 }: Props) {
@@ -62,11 +64,15 @@ export default function GeoMap({
   const popupRef = useRef<Popup | null>(null);
   const firstCorner = useRef<LngLat | null>(null);
   const buildingRef = useRef(buildings);
+  const predictionRef = useRef(predictions);
+  const showPredictionsRef = useRef(showPredictions);
   const aoiRef = useRef(aoi);
   const drawingRef = useRef(drawingAoi);
   const handlersRef = useRef({ onSelect, onAoiChange, onCancelDrawing, onBoundsChange });
   const settingsRef = useRef({ showOrthophoto, showBuildings, opacity, minArea, selectedId, sourceMode });
   buildingRef.current = buildings;
+  predictionRef.current = predictions;
+  showPredictionsRef.current = showPredictions;
   aoiRef.current = aoi;
   drawingRef.current = drawingAoi;
   handlersRef.current = { onSelect, onAoiChange, onCancelDrawing, onBoundsChange };
@@ -145,6 +151,15 @@ export default function GeoMap({
         filter: ['==', ['get', 'fid'], settings.selectedId ?? -1],
         paint: { 'line-color': '#ffde59', 'line-width': 4 },
       });
+      map.addSource('model-predictions', { type: 'geojson', data: predictionRef.current ?? emptyFeatureCollection });
+      map.addLayer({ id: 'model-predictions-fill', type: 'fill', source: 'model-predictions',
+        layout: { visibility: showPredictionsRef.current ? 'visible' : 'none' },
+        paint: { 'fill-color': '#fb923c', 'fill-opacity': 0.14 },
+      });
+      map.addLayer({ id: 'model-predictions-line', type: 'line', source: 'model-predictions',
+        layout: { visibility: showPredictionsRef.current ? 'visible' : 'none' },
+        paint: { 'line-color': '#fb923c', 'line-width': 2.5, 'line-dasharray': [2, 1] },
+      });
       fitImage(map, meta);
       notifyViewport();
       let hovered: number | null = null;
@@ -201,6 +216,19 @@ export default function GeoMap({
       mapRef.current = null;
     };
   }, [meta]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    (map?.getSource('model-predictions') as GeoJSONSource | undefined)?.setData(predictions ?? emptyFeatureCollection);
+  }, [predictions]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    for (const name of ['model-predictions-fill', 'model-predictions-line']) {
+      if (map.getLayer(name)) map.setLayoutProperty(name, 'visibility', showPredictions ? 'visible' : 'none');
+    }
+  }, [showPredictions]);
 
   useEffect(() => {
     const map = mapRef.current;

@@ -13,10 +13,20 @@ public/data/*.png
 public/data/*.geojson
 public/data/metadata.json
 
-# Keep personal AI prompts, planning and secrets out of public Git history.
-*PROMPT*.md
-*prompt*.md
+# Exclude internal working materials and credentials from version control.
+PROJECT_*.md
 INTERNAL_*.md
 PRIVATE_*.md
+*.local.md
 internal/
 planning/
+
+# Large model checkpoints and transient inference assets
+model_cache/
+checkpoints/
+*.pth
+*.ckpt
+*.safetensors
+# AI-generated example footprints can be intentionally published after review.
+!public/data/ai_buildings.geojson
+!public/data/ai_metadata.json

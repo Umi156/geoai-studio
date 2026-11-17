@@ -1,12 +1,12 @@
 # GeoAI Studio
 
-**Interactive geospatial web explorer — v0.4.0**
+**Interactive geospatial intelligence workspace — v0.5.0**
 
 [![Website](https://img.shields.io/badge/Live%20demo-GitHub%20Pages-0ea5e9)](https://umi156.github.io/geoai-studio/)
 
 GeoAI Studio is a **browser-based GIS explorer** that analyzes an automatically prepared Berlin reference dataset directly in the browser, with **optional** user-triggered OpenStreetMap queries. It is built with React, TypeScript, MapLibre GL JS and a small Python geospatial acquisition pipeline.
 
-> **Data honesty:** Neither ALKIS nor OpenStreetMap footprints are AI predictions. This release does not perform neural-network inference, real-time satellite-image acquisition, or arbitrary country-wide processing. The public Overpass API is best-effort and has no SLA.
+> **Data provenance:** ALKIS and OpenStreetMap polygons are reference/community data, not model outputs. An optional offline inference tool can generate actual building predictions from the Berlin orthophoto; those results remain separate and are never substituted for official footprints. The public Overpass API is best-effort and has no SLA.
 
 ## Features
 
@@ -18,7 +18,8 @@ GeoAI Studio is a **browser-based GIS explorer** that analyzes an automatically 
 - Three spatial scopes (full loaded dataset, drawn AOI, or current map viewport), with consistent maps, KPI totals, area histogram and CSV/GeoJSON exports.
 - Clear data-origin labels, loading and error states, request cancellation and bounded server requests.
 - Responsive dashboard, collapsible sidebar and map expansion.
-- Free hosting with GitHub Pages; no GPU, backend or paid provider is needed.
+- Free hosting with GitHub Pages; the core dashboard needs no GPU, backend or paid provider.
+- Optional offline pretrained building-segmentation inference; a separate orange map layer is shown **only when genuinely generated prediction assets exist**.
 
 ## Data sources
 
@@ -55,6 +56,9 @@ src/styles.css               UI design and responsive styling
 scripts/fetch_berlin.py      Small bounded WMS/WFS acquisition for demo assets
 src/services/spatial.ts      Browser-side polygon-to-rectangle intersection
 src/services/export.ts       Safe CSV output
+scripts/run_building_inference.py   Optional CPU/GPU pretrained segmentation and vectorization
+requirements-inference.txt    Optional standalone inference dependencies
+tests/inference/              Offline geometry tests for inference outputs
 tests/aoi.test.mjs          Offline AOI / Overpass shape tests
 tests/spatial.test.mjs      Offline scope/filter/export tests
 tests/test_fetch_berlin.py   Offline Python GIS tests
@@ -94,13 +98,33 @@ On pushes to `main`, GitHub Actions tests the Python GIS utilities, retrieves Be
 
 - Live AOI queries depend on a public, third-party Overpass API. **Not suitable as a commercial-production dependency without a separately operated or contracted service.**
 - GitHub Pages is a static host. It does not execute FastAPI, Python processing or neural-network inference.
-- No actual AI model predictions, solar detection, waste detection, authentication or persistent user projects are included.
+- Model inference is optional and performed offline. No predicted geometry is bundled, downloaded automatically or computed in the GitHub Pages browser. Solar detection, waste detection, authentication and persistent user projects are not yet implemented.
 - Larger areas and reliable AI processing will require a backend, quotas, provenance, caching and an appropriate GPU strategy.
 - Library licenses, basemap terms and dataset usage conditions should be rechecked before commercializing.
 
-### Repository Standards
+## Offline building detection (optional)
 
-This repository contains the application source code, automated tests, configuration files, and technical documentation required for development, maintenance, and deployment.
+This phase introduces a **real, pretrained segmentation model** as an independently executed research workflow. The reference layers remain available even when model weights or compute are unavailable.
+
+**Model:** [WHU Building Detection — UNet++ / EfficientNet-B4](https://huggingface.co/giswqs/whu-building-unetplusplus-efficientnet-b4) (Apache-2.0 model license; confirm imagery and training-data conditions before commercial use). The model was trained on WHU RGB aerial imagery at 0.3 m resolution; its performance on Berlin has **not yet been validated**.
+
+1. Acquire the usual Berlin imagery and ALKIS reference dataset: `python scripts/fetch_berlin.py`.
+2. On a Python 3.12 environment, install PyTorch using the [official instructions](https://pytorch.org/get-started/locally/) (CPU build is suitable for small samples), then `pip install -r requirements-inference.txt`.
+3. Run `python scripts/run_building_inference.py --device cpu --threshold 0.5 --min-area 15`.
+4. Verify the generated `public/data/ai_buildings.geojson` and `public/data/ai_metadata.json` files before publishing them. The script never manufactures predictions when inference fails.
+5. Run `python -m unittest discover -s tests/inference -p 'test_*.py' -v` to check georeferencing/vectorization logic.
+
+The initial model download is performed at inference time and stored outside Git. Its weight hash and exact resolved revision are recorded in output metadata. The output contains separate prediction polygons in EPSG:4326; areas are calculated in EPSG:25833. If ALKIS data is present, pixel-level IoU, precision and recall are recorded for the same study area. These describe agreement on one sample, not validated generalization to the whole city. Public deployments do **not** download model weights or run inference automatically. Generated output can be committed **after review**, at which point the dashboard exposes the orange prediction overlay. The default map remains reference-only.
+
+### Planned LiDAR / multimodal track
+
+Dense airborne LiDAR is available in many regions but not every city. We plan a catalog-driven source adapter for small AOI-based LAZ/COPC/EPT downloads, including point density, classification, coordinate reference system, acquisition date, usage license and source attribution. Possible sources include [Berlin ALS](https://www.govdata.de/suche/daten/airborne-laserscanning-als-primare-3d-laserscan-daten), [USGS 3DEP](https://registry.opendata.aws/usgs-lidar/), [swissSURFACE3D](https://www.swisstopo.admin.ch/en/height-model-swisssurface3d), [AHN Netherlands](https://www.ahn.nl/dataroom), and [IGN LiDAR HD France](https://www.data.gouv.fr/datasets/nuages-de-points-lidar-hd).
+
+Pretrained 3D options include [Point2Building](https://github.com/prs-eth/point2building) for 3D reconstruction, [3dsem](https://pypi.org/project/3dsem/) for point-wise building-class segmentation, and [P³](https://github.com/raphaelsulzer/PixelsPointsPolygons) for 2D polygon prediction with imagery, LiDAR or fusion. P³ pretrained weights have an **academic/non-commercial** license; those weights will not be integrated into a commercial offering without permission. Until actual availability, licensing, compute and cross-city accuracy are verified, these remain future integrations rather than advertised production features.
+
+## Repository Standards
+
+This repository contains application source code, automated tests, configuration files, and technical documentation required for development, maintenance, and deployment.
 
 Internal working documents, confidential information, credentials, and unrelated files are maintained separately from the public codebase.
 

@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.0] — 2026-11-17
+
+### Added
+- Optional pretrained building segmentation from cached Berlin RGB orthophoto, with georeferenced vector predictions, model-weight provenance and localized ALKIS comparison metrics.
+- Independently switchable prediction layer; it is unavailable until real output files have been generated and reviewed.
+- Spatial and inference test suites remain separate to avoid heavy dependencies in routine website deployment.
+- Technical direction for future LiDAR-based and multimodal building extraction with per-provider availability and license controls.
+
+### Notes
+- Inference is not performed on GitHub Pages or in its CI/CD jobs; no synthetic results are supplied.
+- Cross-city performance on Berlin remains unvalidated until actual inference and independent evaluation are completed.
+- Public Overpass requests remain optional and can time out.
+
 ## [0.3.0] — Dynamic Geospatial Explorer
 
 - Added a two-click AOI rectangle tool for mouse and touchscreen users.
@@ -9,7 +22,7 @@
 - Added cached query results, response-size checks, AOI restrictions and offline AOI tests.
 - Preserved the original fixed Berlin orthophoto and reference data as the default dataset.
 - Added attribution metadata to exported GeoJSON.
-- Excluded private AI prompts and internal project planning files from release packages.
+- Limited release packages to public project materials.
 
 ## [0.2.0] — Dashboard usability
 
