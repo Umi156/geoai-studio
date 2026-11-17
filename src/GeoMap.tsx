@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import maplibregl, { Map, Popup } from 'maplibre-gl';
+import maplibregl, { Map, Popup, LngLatBounds } from 'maplibre-gl';
 import type { GeoJSONSource, LngLat } from 'maplibre-gl';
 import type { AoiBounds } from './services/overpass';
 import type { BuildingCollection, BuildingFeature, DatasetMeta } from './types';
