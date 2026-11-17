@@ -54,3 +54,11 @@
 @media(max-width:530px){.aoi-guidance{top:65px;font-size:10px}}
 
 .footer a{color:#7ccfe1;text-decoration:underline;text-underline-offset:2px}
+
+/* v0.3.1 — user-controlled public Overpass service selection */
+.aoi-service-control{display:grid;gap:6px;margin:12px 0 8px}
+.aoi-service-control label{font-size:11px;font-weight:650;color:#d0e9f3}
+.aoi-service-control select{width:100%;min-height:36px;box-sizing:border-box;padding:8px 10px;border-radius:7px;background:#0d2335;color:#e7f6fc;border:1px solid #4d7489;font:inherit;font-size:11px}
+.aoi-service-control select:focus-visible{outline:2px solid #48c3d5;outline-offset:2px}
+.aoi-service-control select:disabled{opacity:.65}
+.aoi-service-control small{font-size:10px;line-height:1.5;color:#9dbccd}

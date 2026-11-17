@@ -10,7 +10,17 @@ const EARTH_RADIUS_M = 6_371_008.8;
 export const MAX_AOI_KM2 = 0.5;
 const MAX_OSM_FEATURES = 2500;
 const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
-const ENDPOINT = 'https://overpass-api.de/api/interpreter';
+/** Public endpoints are manually selectable. Never automatically rotate on a 429/504. */
+export type OverpassProvider = 'fossgis' | 'private-coffee';
+export const OVERPASS_SERVICES: ReadonlyArray<{ id: OverpassProvider; label: string; url: string }> = [
+  { id: 'fossgis', label: 'FOSSGIS (overpass-api.de)', url: 'https://overpass-api.de/api/interpreter' },
+  { id: 'private-coffee', label: 'Private.coffee', url: 'https://overpass.private.coffee/api/interpreter' },
+];
+export function endpointFor(provider: OverpassProvider): string {
+  const service = OVERPASS_SERVICES.find(item => item.id === provider);
+  if (!service) throw new Error('Unknown Overpass provider.');
+  return service.url;
+}
 const CACHE_MS = 15 * 60 * 1000;
 const cache = new Map<string, { savedAt: number; features: BuildingCollection }>();
 
@@ -102,7 +112,7 @@ export function queryText(aoi: AoiBounds): string {
 
 async function readBoundedResponse(response: Response): Promise<unknown> {
   if (!response.ok) {
-    if (response.status === 429 || response.status === 504) throw new Error('OpenStreetMap query service is busy. Please try again later.');
+    if ([429, 503, 504].includes(response.status)) throw new Error(`Public OpenStreetMap service is busy (HTTP ${response.status}). Please wait before trying again, or choose a different service manually.`);
     throw new Error(`OpenStreetMap data request failed (HTTP ${response.status}).`);
   }
   const contentLength = Number(response.headers.get('content-length') || 0);
@@ -128,15 +138,16 @@ async function readBoundedResponse(response: Response): Promise<unknown> {
   catch { throw new Error('The data service returned unreadable data. Try again later.'); }
 }
 
-export async function fetchOsmBuildings(aoi: AoiBounds, signal: AbortSignal): Promise<BuildingCollection> {
+export async function fetchOsmBuildings(aoi: AoiBounds, signal: AbortSignal, provider: OverpassProvider = 'fossgis'): Promise<BuildingCollection> {
   const query = queryText(aoi);
+  const endpoint = endpointFor(provider);
   const key = query;
   const existing = cache.get(key);
   if (existing && Date.now() - existing.savedAt < CACHE_MS) return existing.features;
   // No automatic retries or background polling: each fetch is user-initiated.
   let response: Response;
   try {
-    response = await fetch(ENDPOINT, {
+    response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
       body: new URLSearchParams({ data: query }),
@@ -144,7 +155,7 @@ export async function fetchOsmBuildings(aoi: AoiBounds, signal: AbortSignal): Pr
     });
   } catch (error) {
     if (signal.aborted) throw error;
-    throw new Error('Could not contact the public OpenStreetMap query service. Check your connection or try later.');
+    throw new Error('Could not reach this public OpenStreetMap service. It may be unavailable or block browser requests. Select another service manually or return to the Berlin demo.');
   }
   const result = parseOverpassBuildings(await readBoundedResponse(response));
   cache.set(key, { savedAt: Date.now(), features: result });

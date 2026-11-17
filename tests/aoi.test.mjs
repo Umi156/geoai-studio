@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { inspectAoi, approximatePolygonAreaM2, parseOverpassBuildings, queryText } from '../src/services/overpass.ts';
+import { inspectAoi, approximatePolygonAreaM2, parseOverpassBuildings, queryText, endpointFor, fetchOsmBuildings } from '../src/services/overpass.ts';
 
 const aoi = { west: 13.4, south: 52.52, east: 13.405, north: 52.523 };
 
@@ -54,4 +54,28 @@ test('polygon area is orientation independent and respects interior holes', () =
   const outer = approximatePolygonAreaM2([outside]);
   assert.ok(Math.abs(outer - approximatePolygonAreaM2([[...outside].reverse()])) < 1e-5);
   assert.ok(approximatePolygonAreaM2([outside, hole]) < outer);
+});
+
+
+test('provider URLs are explicit and verified against configured options', () => {
+  assert.equal(endpointFor('fossgis'), 'https://overpass-api.de/api/interpreter');
+  assert.equal(endpointFor('private-coffee'), 'https://overpass.private.coffee/api/interpreter');
+  assert.throws(() => endpointFor('invalid'));
+});
+
+test('a user-selected provider is used for one request without automatic failover', async () => {
+  const oldFetch = globalThis.fetch;
+  let called = 0;
+  globalThis.fetch = async (url) => {
+    called += 1;
+    assert.equal(url, 'https://overpass.private.coffee/api/interpreter');
+    return new Response(JSON.stringify({ elements: [] }), { status: 200 });
+  };
+  try {
+    const result = await fetchOsmBuildings(aoi, new AbortController().signal, 'private-coffee');
+    assert.equal(result.features.length, 0);
+    assert.equal(called, 1);
+  } finally {
+    globalThis.fetch = oldFetch;
+  }
 });

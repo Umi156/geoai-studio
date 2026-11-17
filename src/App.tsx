@@ -3,8 +3,8 @@ import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recha
 import { Activity, ArrowDownToLine, BarChart3, Building2, Check, ChevronDown, CircleHelp, Database, ExternalLink, Layers, Leaf, Map as MapIcon, Maximize2, Menu, MousePointer2, RotateCcw, Search, ShieldCheck, SlidersHorizontal, Sun, X } from 'lucide-react';
 import GeoMap from './GeoMap';
 import type { BuildingCollection, BuildingFeature, DatasetMeta } from './types';
-import { fetchOsmBuildings, inspectAoi } from './services/overpass';
-import type { AoiBounds } from './services/overpass';
+import { fetchOsmBuildings, inspectAoi, OVERPASS_SERVICES } from './services/overpass';
+import type { AoiBounds, OverpassProvider } from './services/overpass';
 
 type ModuleName = 'buildings' | 'solar' | 'waste';
 const modules: { id: ModuleName; title: string; subtitle: string; icon: typeof Building2; ready: boolean }[] = [
@@ -36,6 +36,7 @@ export default function App() {
   const [aoi, setAoi] = useState<AoiBounds | null>(null);
   const [drawingAoi, setDrawingAoi] = useState(false);
   const [osmStatus, setOsmStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [osmProvider, setOsmProvider] = useState<OverpassProvider>('fossgis');
   const [osmError, setOsmError] = useState<string | null>(null);
   const requestRef = useRef<AbortController | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -86,9 +87,9 @@ export default function App() {
     setOsmStatus('loading');
     setOsmError(null);
     let timedOut = false;
-    const timeout = window.setTimeout(() => { timedOut = true; controller.abort(); }, 30_000);
+    const timeout = window.setTimeout(() => { timedOut = true; controller.abort(); }, 35_000);
     try {
-      const result = await fetchOsmBuildings(aoi, controller.signal);
+      const result = await fetchOsmBuildings(aoi, controller.signal, osmProvider);
       if (controller.signal.aborted || requestRef.current !== controller) return;
       setOsmGeo(result);
       setSourceMode('osm');
@@ -101,7 +102,7 @@ export default function App() {
     } catch (e) {
       if (requestRef.current !== controller) return;
       if (controller.signal.aborted && !timedOut) { setOsmStatus('idle'); return; }
-      setOsmError(timedOut ? 'The public service timed out. Try a smaller AOI later.' : e instanceof Error ? e.message : 'Data request failed.');
+      setOsmError(timedOut ? 'This public service did not respond within 35 seconds. Try a smaller AOI (about 100 × 100 m), or select the other service and request again.' : e instanceof Error ? e.message : 'Data request failed.');
       setOsmStatus('error');
     } finally {
       window.clearTimeout(timeout);
@@ -180,12 +181,13 @@ export default function App() {
               </div>
               {aoi && <div className="aoi-metrics"><strong>Selected extent</strong>{aoiSize.size ? <span>{Math.round(aoiSize.size.widthM)} × {Math.round(aoiSize.size.heightM)} m · {aoiSize.size.areaKm2.toFixed(3)} km²</span> : <span className="aoi-error">{aoiSize.error}</span>}</div>}
               {drawingAoi && <p className="aoi-note">Click two opposite corners on the map. Press Esc to stop drawing.</p>}
+              {aoi && aoiSize.size && <div className="aoi-service-control"><label htmlFor="overpass-provider">OpenStreetMap data service</label><select id="overpass-provider" value={osmProvider} disabled={osmStatus === 'loading'} onChange={event => { setOsmProvider(event.target.value as OverpassProvider); setOsmError(null); }} aria-describedby="overpass-note">{OVERPASS_SERVICES.map(service => <option key={service.id} value={service.id}>{service.label}</option>)}</select><small id="overpass-note">Public servers have no guaranteed availability. Switching servers does not start a request automatically.</small></div>}
               {aoi && aoiSize.size && <button className="aoi-fetch-btn" onClick={loadOsmBuildings} disabled={osmStatus === 'loading'}>{osmStatus === 'loading' ? 'Loading buildings…' : 'Fetch OSM buildings'}</button>}
               {osmStatus === 'loading' && <div role="status" className="aoi-loading"><span className="aoi-spinner"/> Querying public OpenStreetMap data… <button onClick={() => requestRef.current?.abort()}>Cancel</button></div>}
               {osmError && <p className="aoi-error" role="alert">{osmError}</p>}
               {isOsm && <div className="aoi-result" role="status">{osmGeo?.features.length ?? 0} OSM buildings loaded. Areas are approximate.</div>}
               {isOsm && <button className="aoi-return-btn" onClick={() => { setSourceMode('alkis'); setSelected(null); setMinArea(0); setOrtho(true); }}>Return to Berlin ALKIS</button>}
-              <p className="aoi-disclaimer">Public Overpass API is best-effort and may be unavailable. Small requests only (max 0.5 km²). Your selected coordinates go directly to the public Overpass server only when you click Fetch. OSM is community mapping, not cadastral data or AI inference.</p>
+              <p className="aoi-disclaimer">Public Overpass APIs are best-effort and may be unavailable. Start with about 100 × 100 m (max 0.5 km²). Please avoid rapid retries or repeated switching between providers. Your selected coordinates go directly to the public Overpass server only when you click Fetch. OSM is community mapping, not cadastral data or AI inference.</p>
             </div>
             {selected && visible && <div className="control-panel inspector-panel" aria-live="polite"><div className="panel-title inspector-heading"><Building2 size={17}/> Selected {isOsm ? 'OSM way' : 'building'} <button onClick={() => setSelected(null)} aria-label="Close building inspector"><X size={16}/></button></div><strong className="inspector-name">{isOsm ? 'OSM way' : 'Building'} #{selected.properties.fid}</strong><dl className="inspector-details"><div><dt>Footprint area</dt><dd>{fmt(selected.properties.area_m2)} m²{isOsm ? ' (approx.)' : ''}</dd></div><div><dt>Dataset</dt><dd>{sourceLabel}</dd></div><div><dt>Classification</dt><dd>{isOsm ? 'OSM community mapping · not AI' : 'Official reference · not AI'}</dd></div></dl></div>}
             <div className="control-panel"><div className="panel-title"><SlidersHorizontal size={17}/> Layer controls</div><div className="control-row"><div><strong>Aerial imagery</strong><small>Berlin DOP20 2025</small></div><button className={`switch ${ortho ? 'on' : ''}`} role="switch" aria-checked={ortho} onClick={() => setOrtho(v => !v)}><span/></button></div>
