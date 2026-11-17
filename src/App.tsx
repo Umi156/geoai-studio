@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
-import { Activity, ArrowDownToLine, BarChart3, Building2, Check, ChevronDown, CircleHelp, Database, ExternalLink, Layers, Leaf, Map as MapIcon, Menu, Search, ShieldCheck, SlidersHorizontal, Sun, X } from 'lucide-react';
+import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Activity, ArrowDownToLine, BarChart3, Building2, Check, ChevronDown, CircleHelp, Database, ExternalLink, Layers, Leaf, Map as MapIcon, Maximize2, Menu, RotateCcw, Search, ShieldCheck, SlidersHorizontal, Sun, X } from 'lucide-react';
 import GeoMap from './GeoMap';
 import type { BuildingCollection, BuildingFeature, DatasetMeta } from './types';
 
@@ -38,6 +38,9 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [sidebar, setSidebar] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
+  const [mapExpanded, setMapExpanded] = useState(false);
+  const [mapResetToken, setMapResetToken] = useState(0);
+  const [locateToken, setLocateToken] = useState(0);
 
   useEffect(() => {
     const base = `${import.meta.env.BASE_URL}data/`;
@@ -51,6 +54,7 @@ export default function App() {
   const area = useMemo(() => filtered.reduce((total, f) => total + f.properties.area_m2, 0), [filtered]);
   const chartData = useMemo(() => areaBuckets.map(b => ({ name: b.label, count: filtered.filter(f => f.properties.area_m2 >= b.low && f.properties.area_m2 < b.high).length })), [filtered]);
   const active = modules.find(m => m.id === module)!;
+  const hasFilters = minArea > 0;
   const visible = module === 'buildings';
   const options = useMemo(() => filtered.filter(f => String(f.properties.fid).includes(search.trim())).slice(0, 7), [filtered, search]);
 
@@ -74,7 +78,7 @@ export default function App() {
       <div className="source-row"><div className="source-status"/><span><strong>ALKIS Berlin</strong><small>Official building footprints</small></span></div>
       <div className="sidebar-bottom">
         <div className="groundtruth"><ShieldCheck size={17}/><div><strong>Verified reference data</strong><p>Ground-truth showcase, not live AI inference.</p></div></div>
-        <div className="version">OPEN DATA DEMO <span>v0.1.0</span></div>
+        <div className="version">OPEN DATA DEMO <span>v0.2.0</span></div>
       </div>
     </aside>
 
@@ -84,37 +88,38 @@ export default function App() {
         <div className="top-actions"><span className="connection"><span/> PUBLIC DATA</span><button className="icon-btn" title="About this demonstration" onClick={() => setShowInfo(true)}><CircleHelp size={19}/></button><div className="avatar">G</div></div>
       </header>
       <main className="content">
-        <div className="page-head"><div><div className="eyebrow"><Activity size={13}/> GEOINTELLIGENCE / {active.id.toUpperCase()}</div><h1>{active.title}</h1><p>{active.subtitle} · Berlin, Germany</p></div><button className="outline-btn" onClick={() => exportGeoJSON(visible ? filtered : [])} disabled={!visible || filtered.length === 0}><ArrowDownToLine size={16}/> Export GeoJSON</button></div>
+        <div className="page-head"><div><div className="eyebrow"><Activity size={13}/> GEOINTELLIGENCE / {active.id.toUpperCase()}</div><h1>{active.title}</h1><p>{active.subtitle} · Berlin, Germany</p></div><button className="outline-btn" title="Export buildings passing the area filter (not limited to current map viewport)" onClick={() => exportGeoJSON(visible ? filtered : [])} disabled={!visible || filtered.length === 0}><ArrowDownToLine size={16}/> Export GeoJSON</button></div>
         <div className="stat-grid">
           <div className="stat-card"><div className="stat-title">Mapped buildings <Building2 size={17}/></div><strong>{visible ? fmt(filtered.length) : '—'}</strong><div className="stat-desc"><span className="stat-up">Reference</span> ALKIS source features</div></div>
           <div className="stat-card"><div className="stat-title">Total footprint area <Layers size={17}/></div><strong>{visible ? fmt(area) : '—'}<small>{visible ? ' m²' : ''}</small></strong><div className="stat-desc">Computed in ETRS89 / UTM 33N</div></div>
-          <div className="stat-card"><div className="stat-title">Mean building area <BarChart3 size={17}/></div><strong>{visible && filtered.length ? fmt(area / filtered.length) : '—'}<small>{visible && filtered.length ? ' m²' : ''}</small></strong><div className="stat-desc">Current filtered extent</div></div>
+          <div className="stat-card"><div className="stat-title">Mean building area <BarChart3 size={17}/></div><strong>{visible && filtered.length ? fmt(area / filtered.length) : '—'}<small>{visible && filtered.length ? ' m²' : ''}</small></strong><div className="stat-desc">Filtered dataset (not map viewport)</div></div>
           <div className="stat-card status-card"><div className="stat-title">Data classification <ShieldCheck size={17}/></div><strong className="status-text">Official</strong><div className="stat-desc"><span className="green-dot"/> Not model predictions</div></div>
         </div>
-        <div className="workspace-grid">
+        <div className={`workspace-grid ${mapExpanded ? 'map-expanded' : ''}`}>
           <section className="map-panel">
-            <div className="panel-bar"><div><span className="panel-icon"><MapIcon size={16}/></span><strong>Spatial Explorer</strong><span className="panel-muted">ETRS89 / UTM 33N</span></div><button className="small-btn" onClick={() => setShowInfo(true)}><Database size={14}/> Sources <ExternalLink size={12}/></button></div>
+            <div className="panel-bar"><div><span className="panel-icon"><MapIcon size={16}/></span><strong>Spatial Explorer</strong><span className="panel-muted">WGS84 map · UTM 33N measurements</span></div><div className="map-actions"><button className="small-btn" title="Fit the map to the study area" onClick={() => setMapResetToken(v => v + 1)}><RotateCcw size={14}/> Reset view</button><button className="small-btn" title={mapExpanded ? "Restore dashboard layout" : "Expand map"} onClick={() => setMapExpanded(v => !v)}><Maximize2 size={14}/> {mapExpanded ? "Restore" : "Expand"}</button><button className="small-btn sources-btn" onClick={() => setShowInfo(true)}><Database size={14}/> Sources <ExternalLink size={12}/></button></div></div>
             <div className="map-wrap">
-              {meta && geo ? <GeoMap meta={meta} buildings={geo} showOrthophoto={ortho} showBuildings={visible && footprints} opacity={opacity} minArea={minArea} selectedId={selected?.properties.fid ?? null} onSelect={setSelected}/> : <div className="map-fallback"><MapIcon size={32}/><strong>{error ? 'Geospatial assets not prepared yet' : 'Loading map data…'}</strong><p>{error ? 'Run: python scripts/fetch_berlin.py — then restart the app.' : 'Retrieving local demo assets'}</p></div>}
-              <div className="map-badge"><span className="pulse"/> {meta ? `Berlin · DOP ${meta.imagery_year}` : 'GeoAI Workspace'}</div>
+              {meta && geo ? <GeoMap meta={meta} buildings={geo} showOrthophoto={ortho} showBuildings={visible && footprints} opacity={opacity} minArea={minArea} selectedId={selected?.properties.fid ?? null} resetToken={mapResetToken} focusToken={locateToken} expanded={mapExpanded} onSelect={setSelected}/> : <div className="map-fallback"><MapIcon size={32}/><strong>{error ? 'Geospatial assets not prepared yet' : 'Loading map data…'}</strong><p>{error ? 'Run: python scripts/fetch_berlin.py — then restart the app.' : 'Retrieving local demo assets'}</p></div>}
+              <div className="map-badge"><span className="pulse"/> {meta ? `Berlin · DOP ${meta.imagery_year} · ${Math.round(meta.bbox_25833[2] - meta.bbox_25833[0])} × ${Math.round(meta.bbox_25833[3] - meta.bbox_25833[1])} m sample` : 'GeoAI Workspace'}</div>
               {module !== 'buildings' && <div className="not-ready"><active.icon size={23}/><strong>{active.title}</strong><p>Reserved for a future, validated dataset and real model. No synthetic predictions are shown.</p><button onClick={() => setModule('buildings')}>Return to building explorer</button></div>}
-              {selected && visible && <div className="feature-inspect"><div className="inspect-head"><span>FEATURE INSPECTOR</span><button onClick={() => setSelected(null)} aria-label="Close selection"><X size={15}/></button></div><strong>Building #{selected.properties.fid}</strong><div><span>Footprint area</span><b>{fmt(selected.properties.area_m2)} m²</b></div><div><span>Dataset</span><b>ALKIS Berlin</b></div><div><span>Data status</span><b>Official reference</b></div></div>}
+
             </div>
-            <div className="map-footer"><span><span className="legend-key"/> ALKIS footprints</span><span>Hover to inspect · Click to select · Scroll to zoom</span></div>
+            <div className="map-footer"><span><span className="legend-key"/> ALKIS footprints · yellow dashed line = orthophoto boundary</span><span>Outside the yellow boundary, only the basemap is displayed</span></div>
           </section>
           <aside className="control-column">
+            {selected && visible && <div className="control-panel inspector-panel" aria-live="polite"><div className="panel-title inspector-heading"><Building2 size={17}/> Selected building <button onClick={() => setSelected(null)} aria-label="Close building inspector"><X size={16}/></button></div><strong className="inspector-name">Building #{selected.properties.fid}</strong><dl className="inspector-details"><div><dt>Footprint area</dt><dd>{fmt(selected.properties.area_m2)} m²</dd></div><div><dt>Dataset</dt><dd>ALKIS Berlin</dd></div><div><dt>Classification</dt><dd>Official reference · not AI</dd></div></dl></div>}
             <div className="control-panel"><div className="panel-title"><SlidersHorizontal size={17}/> Layer controls</div><div className="control-row"><div><strong>Aerial imagery</strong><small>Berlin DOP20 2025</small></div><button className={`switch ${ortho ? 'on' : ''}`} role="switch" aria-checked={ortho} onClick={() => setOrtho(v => !v)}><span/></button></div>
               <div className="control-row"><div><strong>Building footprints</strong><small>ALKIS polygons</small></div><button className={`switch ${footprints ? 'on' : ''}`} role="switch" aria-checked={footprints} onClick={() => setFootprints(v => !v)}><span/></button></div>
               <label className="range-title" htmlFor="op"><span>Imagery opacity</span><b>{Math.round(opacity * 100)}%</b></label><input id="op" type="range" min="0" max="100" step="5" value={Math.round(opacity * 100)} onChange={e => setOpacity(Number(e.target.value) / 100)}/>
-              <label className="range-title" htmlFor="area"><span>Minimum building area</span><b>{minArea} m²</b></label><input id="area" type="range" min="0" max="500" step="25" value={minArea} onChange={e => { setMinArea(Number(e.target.value)); setSelected(null); }}/>
+              <label className="range-title" htmlFor="area"><span>Minimum building area</span><b>{minArea} m²</b></label><input id="area" type="range" min="0" max="500" step="25" value={minArea} onChange={e => { setMinArea(Number(e.target.value)); setSelected(null); }}/>{hasFilters && <button className="reset-filters" onClick={() => { setMinArea(0); setSearch(''); }}>Reset filters</button>}
             </div>
-            <div className="control-panel chart-panel"><div className="panel-title"><BarChart3 size={17}/> Footprint distribution</div><p className="chart-caption">Buildings by area (m²)</p><div className="chart"><ResponsiveContainer width="100%" height="100%"><AreaChart data={visible ? chartData : []} margin={{ top: 12, right: 7, left: 7, bottom: 0 }}><XAxis dataKey="name" tick={{ fill: '#8a96ac', fontSize: 10 }} axisLine={false} tickLine={false}/><Tooltip contentStyle={{ borderRadius: 10, border: '1px solid #344053', background: '#182437', color: '#e9f0f8', fontSize: 12 }}/><Area type="monotone" dataKey="count" stroke="#55c7db" fill="#2d90ad" fillOpacity={0.27} strokeWidth={2}/></AreaChart></ResponsiveContainer></div></div>
-            <div className="control-panel feature-panel"><div className="panel-title"><Search size={17}/> Find a building</div><div className="search-box"><Search size={15}/><input placeholder="Search by feature ID…" value={search} onChange={e => setSearch(e.target.value)}/></div><div className="feature-list">{visible && options.length ? options.map(f => <button key={f.id} onClick={() => setSelected(f)} className={selected?.id === f.id ? 'selected-item' : ''}><span>Building #{f.properties.fid}</span><b>{fmt(f.properties.area_m2)} m²</b></button>) : <p className="empty-features">No matching buildings</p>}</div></div>
+            <div className="control-panel chart-panel"><div className="panel-title"><BarChart3 size={17}/> Footprint distribution</div><p className="chart-caption">Buildings by area (m²)</p><div className="chart"><ResponsiveContainer width="100%" height="100%"><BarChart data={visible ? chartData : []} margin={{ top: 8, right: 7, left: 0, bottom: 0 }}><XAxis dataKey="name" tick={{ fill: '#8a96ac', fontSize: 10 }} axisLine={false} tickLine={false}/><YAxis width={22} allowDecimals={false} tick={{ fill: '#8a96ac', fontSize: 10 }} axisLine={false} tickLine={false}/><Tooltip cursor={{fill: '#ffffff0b'}} contentStyle={{ borderRadius: 10, border: '1px solid #344053', background: '#182437', color: '#e9f0f8', fontSize: 12 }}/><Bar dataKey="count" name="Buildings" fill="#4bc5d8" radius={[4, 4, 0, 0]}/></BarChart></ResponsiveContainer></div></div>
+            <div className="control-panel feature-panel"><div className="panel-title"><Search size={17}/> Find a building</div><div className="search-box"><Search size={15}/><input aria-label="Search buildings by ID" placeholder="Search by feature ID…" value={search} onChange={e => setSearch(e.target.value)}/></div><div className="feature-list" aria-label="Building search results">{visible && options.length ? options.map(f => <button key={f.id} onClick={() => { setSelected(f); setLocateToken(v => v + 1); }} className={selected?.id === f.id ? 'selected-item' : ''}><span>Building #{f.properties.fid}</span><b>{fmt(f.properties.area_m2)} m²</b></button>) : <p className="empty-features">No matching buildings</p>}</div></div>
           </aside>
         </div>
         <footer className="footer"><span>© GeoAI Studio · Educational geospatial research</span><span>Imagery © Geoportal Berlin · Buildings © Geoportal Berlin · Basemap © OpenFreeMap / OpenStreetMap contributors</span></footer>
       </main>
     </div>
-    {showInfo && <div className="modal-overlay" onClick={() => setShowInfo(false)}><div className="modal" onClick={e => e.stopPropagation()}><button className="modal-close" onClick={() => setShowInfo(false)}><X size={20}/></button><div className="eyebrow">DATA PROVENANCE</div><h2>Real geospatial data. No simulated AI results.</h2><p>This first release uses two official Berlin open data services. A local Python script downloads a small orthophoto and matching cadastral building footprints automatically.</p><div className="modal-row"><strong>Imagery</strong><span>DOP20RGBI 2025 · Geoportal Berlin WMS</span></div><div className="modal-row"><strong>Buildings</strong><span>ALKIS Berlin Gebäude · Geoportal Berlin WFS</span></div><div className="modal-row"><strong>Coordinate system</strong><span>ETRS89 / UTM zone 33N (EPSG:25833)</span></div><div className="modal-row"><strong>License</strong><span>dl-de/zero-2-0</span></div><p className="modal-note">Building areas are calculated from official polygons; they are not validation metrics or AI confidence scores.</p><button className="primary-btn" onClick={() => setShowInfo(false)}><Check size={16}/> Understood</button></div></div>}
+    {showInfo && <div className="modal-overlay" onClick={() => setShowInfo(false)}><div className="modal" onClick={e => e.stopPropagation()}><button className="modal-close" onClick={() => setShowInfo(false)}><X size={20}/></button><div className="eyebrow">DATA PROVENANCE</div><h2>Real geospatial data. No simulated AI results.</h2><p>This first release uses two official Berlin open data services. A Python script downloads a small, fixed orthophoto and matching cadastral building footprints automatically. Zooming out reveals the ordinary basemap outside that image extent; no additional orthophotos are downloaded as you pan or zoom. ALKIS features may extend past the imagery boundary because official buildings are not clipped to that rectangle.</p><div className="modal-row"><strong>Imagery</strong><span>DOP20RGBI 2025 · Geoportal Berlin WMS</span></div><div className="modal-row"><strong>Buildings</strong><span>ALKIS Berlin Gebäude · Geoportal Berlin WFS</span></div><div className="modal-row"><strong>Coordinate system</strong><span>ETRS89 / UTM zone 33N (EPSG:25833)</span></div><div className="modal-row"><strong>License</strong><span>dl-de/zero-2-0</span></div><p className="modal-note">Building areas are calculated from official polygons; they are not validation metrics or AI confidence scores.</p><button className="primary-btn" onClick={() => setShowInfo(false)}><Check size={16}/> Understood</button></div></div>}
   </div>;
 }
