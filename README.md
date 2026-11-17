@@ -1,6 +1,6 @@
 # GeoAI Studio
 
-**Interactive geospatial intelligence workspace — v0.5.0**
+**Interactive geospatial intelligence workspace — v0.6.0**
 
 [![Website](https://img.shields.io/badge/Live%20demo-GitHub%20Pages-0ea5e9)](https://umi156.github.io/geoai-studio/)
 
@@ -8,7 +8,43 @@ GeoAI Studio is a **browser-based GIS explorer** that analyzes an automatically 
 
 > **Data provenance:** ALKIS and OpenStreetMap polygons are reference/community data, not model outputs. An optional offline inference tool can generate actual building predictions from the Berlin orthophoto; those results remain separate and are never substituted for official footprints. The public Overpass API is best-effort and has no SLA.
 
+## Technology Stack
+
+Badges link to the relevant tool documentation. The stack is reviewed whenever implementation dependencies change.
+
+**Web application**
+
+[![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vite.dev/)
+[![MapLibre GL JS](https://img.shields.io/badge/MapLibre_GL_JS-285570?style=for-the-badge)](https://maplibre.org/maplibre-gl-js/docs/)
+[![Recharts](https://img.shields.io/badge/Recharts-8884D8?style=for-the-badge)](https://recharts.org/)
+[![Lucide](https://img.shields.io/badge/Lucide-FF4D4F?style=for-the-badge)](https://lucide.dev/)
+
+**Geospatial data and processing**
+
+[![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Shapely](https://img.shields.io/badge/Shapely-2F855A?style=for-the-badge)](https://shapely.readthedocs.io/)
+[![PyProj](https://img.shields.io/badge/PROJ-277DA1?style=for-the-badge)](https://pyproj4.github.io/pyproj/)
+[![OpenStreetMap](https://img.shields.io/badge/OpenStreetMap-7EBC6F?style=for-the-badge&logo=openstreetmap&logoColor=white)](https://www.openstreetmap.org/)
+[![Overpass API](https://img.shields.io/badge/Overpass_API-5B795A?style=for-the-badge)](https://wiki.openstreetmap.org/wiki/Overpass_API)
+
+**Automation and deployment**
+
+[![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](https://docs.github.com/en/actions)
+[![GitHub Pages](https://img.shields.io/badge/GitHub_Pages-181717?style=for-the-badge&logo=github&logoColor=white)](https://docs.github.com/en/pages)
+[![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+
+**Optional offline model processing** (not executed by GitHub Pages)
+
+[![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)](https://pytorch.org/)
+[![Hugging Face](https://img.shields.io/badge/Hugging_Face-FFD21E?style=for-the-badge&logo=huggingface&logoColor=black)](https://huggingface.co/)
+[![Rasterio](https://img.shields.io/badge/Rasterio-277DA1?style=for-the-badge)](https://rasterio.readthedocs.io/)
+
 ## Features
+
+- **Manual Annotation Studio (v0.6):** draw bounding boxes or polygon labels directly on the Berlin orthophoto, assign classes (vehicles, solar panels, possible waste sites, buildings, vegetation, water or custom), review each label, and save locally.
+- **Interoperable annotations:** export or import a validated GeoJSON FeatureCollection with WGS84 geometry, imagery extent/year, creator origin, review state and source attribution. This release does **not** perform find-similar inference or model training.
 
 - Interactive aerial map, with a visible boundary identifying the limited Berlin orthophoto coverage.
 - Official ALKIS Berlin building footprints, area calculations, click-to-inspect, hover tooltips, filters and GeoJSON export.
@@ -45,6 +81,18 @@ OSM buildings returned by a bounding-box query may partly lie beyond the selecte
 
 **Safety limits:** AOI ≤ 0.5 km² and ≤ 1 km along either side; up to 5 MB response data and 2,500 OSM features. The browser sends the selected geographic coordinates directly to the third-party Overpass API only when the visitor clicks Fetch; there is no automatic request on pan or zoom. A failed live request does not replace the working Berlin dataset.
 
+## Manual Annotation Studio (v0.6)
+
+1. Load the Berlin reference map and keep **Aerial imagery** enabled.
+2. Select a class under **Annotation Studio** (or enter a custom class name).
+3. Select **Draw box**, then click two opposite corners of an object within the yellow dashed orthophoto boundary. For irregular objects, select **Draw polygon**, click its vertices, then press **Enter** or double-click to close the polygon. **Esc** cancels the draft.
+4. Click the saved annotation on the map or in the annotation list, then set its review status to **Accept** or **Reject**, or remove it.
+5. Click **Export GeoJSON** to back up labels. You can later import an exported file **for the same imagery year and geographic extent**. Import replaces the current annotation set after confirmation.
+
+**Persistence and scope:** Annotations are stored only in the browser's `localStorage`, separated by imagery year and geographic extent; they are not synchronized to an account or server. Clear browser data or change devices and the local data may disappear. Export a backup after each annotation session. The current Berlin imagery is only 200 × 200 m; outside that region, annotations are blocked rather than pretending higher-resolution imagery is available.
+
+**Data integrity:** All manually drawn shapes are stored as GeoJSON polygons in EPSG:4326, with `origin: manual_annotation`, a class, a review state and a timestamp. Unreviewed and accepted annotations are **user labels, not independently verified ground truth**. Future model predictions must be stored as a separate dataset and cannot be silently mixed with annotations. No automatic find-similar detection is available in v0.6.
+
 ## Source layout
 
 ```text
@@ -56,6 +104,8 @@ src/styles.css               UI design and responsive styling
 scripts/fetch_berlin.py      Small bounded WMS/WFS acquisition for demo assets
 src/services/spatial.ts      Browser-side polygon-to-rectangle intersection
 src/services/export.ts       Safe CSV output
+src/services/annotations.ts Manual polygon/box label validation and GeoJSON import/export
+tests/annotations.test.mjs  Annotation geometry, provenance, and import validation
 scripts/run_building_inference.py   Optional CPU/GPU pretrained segmentation and vectorization
 requirements-inference.txt    Optional standalone inference dependencies
 tests/inference/              Offline geometry tests for inference outputs
@@ -84,9 +134,9 @@ The app relies on generated assets under `public/data/`, which are created by th
 
 ## Deployment
 
-On pushes to `main`, GitHub Actions tests the Python GIS utilities, retrieves Berlin reference data, installs frontend dependencies, runs AOI tests, builds the site and deploys `dist/` through GitHub Pages. In repository Settings → Pages, select **GitHub Actions** as the build source.
+On pushes to `main`, GitHub Actions tests the Python GIS utilities, retrieves Berlin reference data, installs frontend dependencies, runs AOI and annotation tests, builds the site and deploys `dist/` through GitHub Pages. In repository Settings → Pages, select **GitHub Actions** as the build source.
 
-## v0.4 geospatial accuracy
+## Geospatial accuracy
 
 - Features are counted when their polygons intersect the chosen rectangle or map viewport (rather than merely comparing bounding boxes). The geometry is not clipped.
 - Area totals **sum complete source feature footprint areas**, even for features partly outside the selection. They are *not* clipped-area measurements or percentage-of-AOI coverage.

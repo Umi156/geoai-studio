@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Activity, ArrowDownToLine, BarChart3, Building2, Check, ChevronDown, CircleHelp, Database, ExternalLink, Layers, Leaf, Map as MapIcon, Maximize2, Menu, MousePointer2, RotateCcw, Search, ShieldCheck, SlidersHorizontal, Sun, X } from 'lucide-react';
+import { Activity, ArrowDownToLine, BarChart3, Building2, Check, ChevronDown, CircleHelp, Database, ExternalLink, Layers, Leaf, Map as MapIcon, Maximize2, Menu, MousePointer2, RotateCcw, Search, ShieldCheck, SlidersHorizontal, Sun, X, Pencil, Square, Pentagon, Upload, Trash2, CheckCircle2, XCircle, Save } from 'lucide-react';
 import GeoMap from './GeoMap';
 import type { BuildingCollection, BuildingFeature, DatasetMeta } from './types';
 import { fetchOsmBuildings, inspectAoi, OVERPASS_SERVICES } from './services/overpass';
@@ -8,6 +8,8 @@ import type { AoiBounds, OverpassProvider } from './services/overpass';
 import { filterBuildings } from './services/spatial';
 import type { SpatialScope } from './services/spatial';
 import { buildingCsv } from './services/export';
+import { exportAnnotations, imageExtent, importAnnotationText, makeRing, newAnnotation, normalizedClass, storageKey, MAX_ANNOTATIONS } from './services/annotations';
+import type { Annotation, DrawingShape, AnnotationStatus, Position } from './services/annotations';
 
 type ModuleName = 'buildings' | 'solar' | 'waste';
 const modules: { id: ModuleName; title: string; subtitle: string; icon: typeof Building2; ready: boolean }[] = [
@@ -67,6 +69,15 @@ export default function App() {
   const [mapExpanded, setMapExpanded] = useState(false);
   const [mapResetToken, setMapResetToken] = useState(0);
   const [locateToken, setLocateToken] = useState(0);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [annotationsLoaded, setAnnotationsLoaded] = useState(false);
+  const [annotationMode, setAnnotationMode] = useState<DrawingShape | null>(null);
+  const [annotationClass, setAnnotationClass] = useState('solar_panel');
+  const [customClass, setCustomClass] = useState('');
+  const [annotationRename, setAnnotationRename] = useState('');
+  const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
+  const [annotationMessage, setAnnotationMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const base = `${import.meta.env.BASE_URL}data/`;
@@ -96,6 +107,86 @@ export default function App() {
   }, [meta]);
 
   useEffect(() => () => requestRef.current?.abort(), []);
+
+  // Browser-local persistence is keyed to the actual image extent and year.
+  useEffect(() => {
+    if (!meta) return;
+    const extent = imageExtent(meta.image_corners);
+    try {
+      const saved = window.localStorage.getItem(storageKey(meta.imagery_year, extent));
+      setAnnotations(saved ? importAnnotationText(saved, meta.imagery_year, extent) : []);
+      setAnnotationMessage(null);
+    } catch (err) {
+      setAnnotations([]);
+      setAnnotationMessage(`Previously saved annotations could not be loaded: ${err instanceof Error ? err.message : 'invalid data'}. Import your backup if available.`);
+    }
+    setAnnotationsLoaded(true);
+  }, [meta]);
+
+  useEffect(() => {
+    if (!meta || !annotationsLoaded) return;
+    const extent = imageExtent(meta.image_corners);
+    try {
+      window.localStorage.setItem(storageKey(meta.imagery_year, extent), exportAnnotations(annotations, meta.imagery_year, extent));
+    } catch {
+      setAnnotationMessage('Local saving is unavailable or full. Export GeoJSON now to avoid losing your work.');
+    }
+  }, [annotations, annotationsLoaded, meta]);
+
+  const createManualAnnotation = (ring: Position[], shape: DrawingShape) => {
+    if (!meta) return;
+    if (annotations.length >= MAX_ANNOTATIONS) { setAnnotationMessage(`Maximum ${MAX_ANNOTATIONS} annotations reached. Export the current dataset.`); setAnnotationMode(null); return; }
+    try {
+      const label = annotationClass === 'custom' ? normalizedClass(customClass) : annotationClass;
+      const item = newAnnotation(crypto.randomUUID(), label, shape, makeRing(ring.slice(0, -1), 'polygon', imageExtent(meta.image_corners)), imageExtent(meta.image_corners));
+      setAnnotations(previous => [...previous, item]);
+      setSelectedAnnotationId(item.id);
+      setAnnotationMessage(`Saved ${label} as a manual annotation. Review its label before training.`);
+    } catch (err) { setAnnotationMessage(err instanceof Error ? err.message : 'Annotation rejected.'); }
+  };
+  const startAnnotation = (shape: DrawingShape) => {
+    if (!meta) return;
+    try { normalizedClass(annotationClass === 'custom' ? customClass : annotationClass); }
+    catch (err) { setAnnotationMessage(err instanceof Error ? err.message : 'Invalid class name.'); return; }
+    setDrawingAoi(false);
+    setSourceMode('alkis');
+    setOrtho(true);
+    setModule('buildings');
+    setMapResetToken(v => v + 1);
+    setAnnotationMode(current => current === shape ? null : shape);
+    setAnnotationMessage(null);
+  };
+  const updateAnnotation = (id: string, status: AnnotationStatus) => {
+    setAnnotations(previous => previous.map(item => item.id === id ? { ...item, properties: { ...item.properties, status } } : item));
+  };
+  const renameAnnotation = (id: string, label: string) => {
+    try {
+      const name = normalizedClass(label);
+      setAnnotations(previous => previous.map(item => item.id === id ? { ...item, properties: { ...item.properties, class_name: name } } : item));
+      setAnnotationMessage('Annotation class updated.');
+    } catch (err) { setAnnotationMessage(err instanceof Error ? err.message : 'Invalid class.'); }
+  };
+  const exportManualAnnotations = () => {
+    if (!meta) return;
+    downloadText(exportAnnotations(annotations, meta.imagery_year, imageExtent(meta.image_corners)), 'geoai-studio-manual-annotations.geojson', 'application/geo+json');
+    setAnnotationMessage('GeoJSON exported. Keep a backup: browser storage is device-specific.');
+  };
+  const importManualAnnotations = async (file: File | undefined) => {
+    if (!file || !meta) return;
+    try {
+      if (file.size > 2_000_000) throw new Error('Import file exceeds 2 MB.');
+      const parsed = importAnnotationText(await file.text(), meta.imagery_year, imageExtent(meta.image_corners));
+      if (parsed.length > MAX_ANNOTATIONS) throw new Error('Too many annotations.');
+      if (annotations.length && !window.confirm('Replace all current annotations with the imported file? Export a backup first.')) return;
+      setAnnotations(parsed);
+      setAnnotationMode(null);
+      setSelectedAnnotationId(null);
+      setAnnotationMessage(`Imported ${parsed.length} manual annotations.`);
+    } catch (err) { setAnnotationMessage(err instanceof Error ? err.message : 'Import failed.'); }
+    finally { if (fileInputRef.current) fileInputRef.current.value = ''; }
+  };
+  const selectedAnnotation = annotations.find(item => item.id === selectedAnnotationId) ?? null;
+  useEffect(() => { setAnnotationRename(selectedAnnotation?.properties.class_name ?? ''); }, [selectedAnnotationId]);
 
   const aoiSize = useMemo(() => {
     if (!aoi) return { size: null, error: null };
@@ -175,6 +266,7 @@ export default function App() {
       </div>
       <div className="nav-label">WORKSPACE</div>
       <button className="nav-main active"><MapIcon size={17}/> GeoAI Explorer <span className="nav-dot"/></button>
+      <div className="source-row"><div className="source-status annotation-source"/><span><strong>Annotation workspace</strong><small>Manual labels · {annotations.length} saved locally</small></span></div>
       <div className="nav-label second">APPLICATIONS</div>
       <div className="modules">
         {modules.map(m => <button key={m.id} className={`module-btn ${module === m.id ? 'chosen' : ''}`} onClick={() => { setModule(m.id); setSelected(null); setSidebar(false); }}>
@@ -188,7 +280,7 @@ export default function App() {
       <div className="source-row"><div className="source-status prediction-status"/><span><strong>Building segmentation</strong><small>{predictions ? 'Predictions available · unvalidated' : 'Offline model stage · optional'}</small></span></div>
       <div className="sidebar-bottom">
         <div className="groundtruth"><ShieldCheck size={17}/><div><strong>{sourceMode === 'osm' ? 'Community map data' : 'Official reference data'}</strong><p>{sourceMode === 'osm' ? 'OpenStreetMap contributors · not AI inference.' : 'Berlin ALKIS footprints · not AI inference.'}</p></div></div>
-        <div className="version">GEOAI STUDIO <span>v0.5.0</span></div>
+        <div className="version">GEOAI STUDIO <span>v0.6.0</span></div>
       </div>
     </aside>
 
@@ -207,10 +299,11 @@ export default function App() {
         </div>
         <div className={`workspace-grid ${mapExpanded ? 'map-expanded' : ''}`}>
           <section className="map-panel">
-            <div className="panel-bar"><div><span className="panel-icon"><MapIcon size={16}/></span><strong>Spatial Explorer</strong><span className="panel-muted">{isOsm ? 'WGS84 · estimated areas' : 'WGS84 map · UTM 33N measurements'}</span></div><div className="map-actions"><button className={`small-btn ${drawingAoi ? 'drawing-active' : ''}`} title="Select an area with two map clicks" onClick={() => { setDrawingAoi(v => !v); setAoi(null); setSpatialScope('dataset'); setOsmError(null); setSourceMode('alkis'); setSelected(null); }} disabled={osmStatus === 'loading'}><MousePointer2 size={14}/> {drawingAoi ? 'Cancel AOI' : 'Draw AOI'}</button><button className="small-btn" title="Fit the map to the study area" onClick={() => setMapResetToken(v => v + 1)}><RotateCcw size={14}/> Reset view</button><button className="small-btn" title={mapExpanded ? "Restore dashboard layout" : "Expand map"} onClick={() => setMapExpanded(v => !v)}><Maximize2 size={14}/> {mapExpanded ? "Restore" : "Expand"}</button><button className="small-btn sources-btn" onClick={() => setShowInfo(true)}><Database size={14}/> Sources <ExternalLink size={12}/></button></div></div>
+            <div className="panel-bar"><div><span className="panel-icon"><MapIcon size={16}/></span><strong>Spatial Explorer</strong><span className="panel-muted">{isOsm ? 'WGS84 · estimated areas' : 'WGS84 map · UTM 33N measurements'}</span></div><div className="map-actions"><button className={`small-btn ${drawingAoi ? 'drawing-active' : ''}`} title="Select an area with two map clicks" onClick={() => { setAnnotationMode(null); setDrawingAoi(v => !v); setAoi(null); setSpatialScope('dataset'); setOsmError(null); setSourceMode('alkis'); setSelected(null); }} disabled={osmStatus === 'loading'}><MousePointer2 size={14}/> {drawingAoi ? 'Cancel AOI' : 'Draw AOI'}</button><button className="small-btn" title="Fit the map to the study area" onClick={() => setMapResetToken(v => v + 1)}><RotateCcw size={14}/> Reset view</button><button className="small-btn" title={mapExpanded ? "Restore dashboard layout" : "Expand map"} onClick={() => setMapExpanded(v => !v)}><Maximize2 size={14}/> {mapExpanded ? "Restore" : "Expand"}</button><button className="small-btn sources-btn" onClick={() => setShowInfo(true)}><Database size={14}/> Sources <ExternalLink size={12}/></button></div></div>
             <div className="map-wrap">
-              {meta && geo && activeGeo ? <GeoMap meta={meta} buildings={displayGeo} predictions={predictions} showPredictions={visible && !isOsm && showPredictions} showOrthophoto={ortho} showBuildings={visible && footprints} opacity={opacity} minArea={minArea} selectedId={selected?.properties.fid ?? null} resetToken={mapResetToken} focusToken={locateToken} expanded={mapExpanded} sourceMode={sourceMode} aoi={aoi} drawingAoi={drawingAoi} onAoiChange={handleNewAoi} onCancelDrawing={() => setDrawingAoi(false)} onSelect={setSelected} onBoundsChange={setViewport}/> : <div className="map-fallback"><MapIcon size={32}/><strong>{error ? 'Geospatial assets not prepared yet' : 'Loading map data…'}</strong><p>{error ? 'Run: python scripts/fetch_berlin.py — then restart the app.' : 'Retrieving local demo assets'}</p></div>}
+              {meta && geo && activeGeo ? <GeoMap meta={meta} buildings={displayGeo} predictions={predictions} showPredictions={visible && !isOsm && showPredictions} showOrthophoto={ortho} showBuildings={visible && footprints} opacity={opacity} minArea={minArea} selectedId={selected?.properties.fid ?? null} resetToken={mapResetToken} focusToken={locateToken} expanded={mapExpanded} sourceMode={sourceMode} aoi={aoi} drawingAoi={drawingAoi} onAoiChange={handleNewAoi} onCancelDrawing={() => setDrawingAoi(false)} onSelect={setSelected} onBoundsChange={setViewport} annotations={annotations} annotationMode={annotationMode} selectedAnnotationId={selectedAnnotationId} onAnnotationCreate={createManualAnnotation} onAnnotationSelect={setSelectedAnnotationId} onAnnotationCancel={() => setAnnotationMode(null)} onAnnotationError={setAnnotationMessage}/> : <div className="map-fallback"><MapIcon size={32}/><strong>{error ? 'Geospatial assets not prepared yet' : 'Loading map data…'}</strong><p>{error ? 'Run: python scripts/fetch_berlin.py — then restart the app.' : 'Retrieving local demo assets'}</p></div>}
               <div className="map-badge"><span className="pulse"/> {isOsm ? 'Selected AOI · OSM community buildings' : meta ? `Berlin · DOP ${meta.imagery_year} · ${Math.round(meta.bbox_25833[2] - meta.bbox_25833[0])} × ${Math.round(meta.bbox_25833[3] - meta.bbox_25833[1])} m sample` : 'GeoAI Workspace'}</div>
+              {annotationMode && <div className="aoi-guidance annotation-guidance"><Pencil size={15}/>{annotationMode === 'box' ? 'Box: click two opposite corners within the aerial image. Esc to cancel.' : 'Polygon: click corners within the image, then double-click or press Enter to finish. Esc to cancel.'}</div>}
               {drawingAoi && <div className="aoi-guidance"><MousePointer2 size={15}/> Click the first corner, move the cursor, then click the opposite corner. Press Esc to cancel.</div>}
               {module !== 'buildings' && <div className="not-ready"><active.icon size={23}/><strong>{active.title}</strong><p>Reserved for a future, validated dataset and real model. No synthetic predictions are shown.</p><button onClick={() => setModule('buildings')}>Return to building explorer</button></div>}
 
@@ -218,6 +311,46 @@ export default function App() {
             <div className="map-footer"><span><span className={`legend-key ${isOsm ? 'legend-osm' : ''}`}/> {sourceLabel} · yellow dashed = imagery boundary</span><span>{isOsm ? 'OSM © contributors · ODbL · live query limited to building ways' : 'Outside image boundary: basemap only'}</span></div>
           </section>
           <aside className="control-column">
+            <section className="control-panel annotation-panel" aria-label="Imagery annotation workspace">
+              <div className="panel-title"><Pencil size={17}/> Annotation Studio <span className="aoi-beta">MANUAL LABELS</span></div>
+              <p className="aoi-intro">Teach the dataset what to look for. Draw labelled boxes or polygons on the Berlin orthophoto. These are <strong>your annotations</strong>, not automatic detections.</p>
+              <label className="spatial-label" htmlFor="annotation-class">Object class</label>
+              <select id="annotation-class" value={annotationClass} onChange={e => { setAnnotationClass(e.target.value); setAnnotationMode(null); }}>
+                <option value="solar_panel">Solar panel</option>
+                <option value="vehicle">Vehicle / car</option>
+                <option value="waste_site">Possible waste site</option>
+                <option value="building">Building</option>
+                <option value="vegetation">Vegetation</option>
+                <option value="water">Water</option>
+                <option value="custom">Custom class…</option>
+              </select>
+              {annotationClass === 'custom' && <input className="annotation-input" aria-label="Custom class name" maxLength={40} value={customClass} placeholder="e.g. rooftop equipment" onChange={e => setCustomClass(e.target.value)}/>}
+              <div className="annotation-tools">
+                <button className={`aoi-outline-btn ${annotationMode === 'box' ? 'drawing-active' : ''}`} onClick={() => startAnnotation('box')} disabled={!meta}><Square size={15}/>{annotationMode === 'box' ? 'Stop boxes' : 'Draw box'}</button>
+                <button className={`aoi-outline-btn ${annotationMode === 'polygon' ? 'drawing-active' : ''}`} onClick={() => startAnnotation('polygon')} disabled={!meta}><Pentagon size={15}/>{annotationMode === 'polygon' ? 'Stop polygon' : 'Draw polygon'}</button>
+              </div>
+              <div className="annotation-summary" role="status"><strong>{annotations.length} annotations</strong><span>{annotations.filter(item => item.properties.status === 'accepted').length} accepted · {annotations.filter(item => item.properties.status === 'unreviewed').length} awaiting review</span></div>
+              <div className="annotation-buttons">
+                <button className="aoi-outline-btn" disabled={!meta} onClick={exportManualAnnotations}><Save size={14}/> Export GeoJSON</button>
+                <button className="aoi-outline-btn" disabled={!meta} onClick={() => fileInputRef.current?.click()}><Upload size={14}/> Import</button>
+                <input ref={fileInputRef} type="file" accept=".geojson,.json,application/geo+json,application/json" hidden onChange={event => { void importManualAnnotations(event.target.files?.[0]); }}/>
+              </div>
+              {annotationMessage && <p className="annotation-notice" role="status">{annotationMessage}</p>}
+              {selectedAnnotation && <div className="annotation-details">
+                <strong>Selected annotation</strong>
+                <label htmlFor="annotation-rename">Class</label>
+                <div className="annotation-buttons annotation-rename-row"><input id="annotation-rename" className="annotation-input" maxLength={40} value={annotationRename} onChange={event => setAnnotationRename(event.target.value)}/><button className="aoi-outline-btn" disabled={!annotationRename.trim()} onClick={() => renameAnnotation(selectedAnnotation.id, annotationRename)}>Save label</button></div>
+                <span className="annotation-record">{selectedAnnotation.properties.shape} · {selectedAnnotation.properties.status}</span>
+                <div className="annotation-buttons">
+                  <button className="aoi-outline-btn" onClick={() => updateAnnotation(selectedAnnotation.id, 'accepted')}><CheckCircle2 size={14}/> Accept</button>
+                  <button className="aoi-outline-btn" onClick={() => updateAnnotation(selectedAnnotation.id, 'rejected')}><XCircle size={14}/> Reject</button>
+                  <button className="aoi-outline-btn danger-btn" onClick={() => { setAnnotations(previous => previous.filter(item => item.id !== selectedAnnotation.id)); setSelectedAnnotationId(null); }}><Trash2 size={14}/> Delete</button>
+                </div>
+              </div>}
+              {annotations.length > 0 && <div className="annotation-list" aria-label="Annotation records">{annotations.slice(-15).reverse().map(item => <button key={item.id} className={selectedAnnotationId === item.id ? 'active-annotation' : ''} onClick={() => setSelectedAnnotationId(item.id)}><span>{item.properties.class_name}</span><small>{item.properties.status}</small></button>)}</div>}
+              {annotations.length > 0 && <button className="annotation-clear" onClick={() => { if (window.confirm('Delete every local annotation? Export GeoJSON first.')) { setAnnotations([]); setSelectedAnnotationId(null); } }}>Clear annotations…</button>}
+              <p className="aoi-disclaimer">Annotations are saved in this browser only, for the currently loaded image. Use Export GeoJSON to back them up. Outside the yellow orthophoto boundary, no annotation is permitted. No objects are detected or trained automatically in this release.</p>
+            </section>
             <div className="control-panel spatial-panel">
               <div className="panel-title"><Layers size={17}/> Spatial analysis <span className="aoi-beta">OFFLINE READY</span></div>
               <p className="aoi-intro">Analyze downloaded features without calling a public API. The map, metrics, chart and exports use the same spatial scope.</p>
@@ -235,7 +368,7 @@ export default function App() {
               <div className="panel-title"><MousePointer2 size={17}/> Draw / Explore AOI <span className="aoi-beta">SELECTION</span></div>
               <p className="aoi-intro">Draw a rectangle to analyze the existing buildings immediately. Optional live OSM retrieval remains experimental and may time out.</p>
               <div className="aoi-buttons">
-                <button className="aoi-outline-btn" onClick={() => { setDrawingAoi(true); setAoi(null); setSpatialScope('dataset'); setOsmError(null); setSourceMode('alkis'); setSelected(null); }} disabled={osmStatus === 'loading'}>{drawingAoi ? 'Start again' : 'Draw rectangle'}</button>
+                <button className="aoi-outline-btn" onClick={() => { setAnnotationMode(null); setDrawingAoi(true); setAoi(null); setSpatialScope('dataset'); setOsmError(null); setSourceMode('alkis'); setSelected(null); }} disabled={osmStatus === 'loading'}>{drawingAoi ? 'Start again' : 'Draw rectangle'}</button>
                 {aoi && <button className="aoi-outline-btn" onClick={() => { setAoi(null); setSpatialScope('dataset'); setDrawingAoi(false); setOsmError(null); setSourceMode('alkis'); setSelected(null); setOsmStatus('idle'); setOsmGeo(null); }}>Clear</button>}
               </div>
               {aoi && <div className="aoi-metrics"><strong>Selected extent</strong>{aoiSize.size ? <span>{Math.round(aoiSize.size.widthM)} × {Math.round(aoiSize.size.heightM)} m · {aoiSize.size.areaKm2.toFixed(3)} km²</span> : <span className="aoi-error">{aoiSize.error}</span>}</div>}
@@ -263,6 +396,6 @@ export default function App() {
         <footer className="footer"><span>© GeoAI Studio · Educational geospatial research</span><span>Berlin imagery/ALKIS © Geoportal Berlin · OSM <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© contributors (ODbL)</a> · Basemap © OpenFreeMap / OSM</span></footer>
       </main>
     </div>
-    {showInfo && <div className="modal-overlay" onClick={() => setShowInfo(false)}><div className="modal" onClick={e => e.stopPropagation()}><button className="modal-close" onClick={() => setShowInfo(false)}><X size={20}/></button><div className="eyebrow">DATA PROVENANCE</div><h2>Real geospatial data. No simulated AI results.</h2><p>The default demonstration loads a small official Berlin orthophoto and official ALKIS building footprints acquired by Python during deployment. The dashed image border is the full downloaded extent; no additional orthophotos are downloaded on pan or zoom. Live AOI discovery separately queries building ways mapped by OpenStreetMap contributors through a public Overpass API endpoint. OSM coverage is not complete, its polygon areas are approximate, and the public API can be unavailable or rate limited. Neither dataset constitutes AI predictions. v0.5 spatial analysis works locally against the current loaded features, and sums full footprint areas for polygons intersecting an AOI or map viewport.</p><div className="modal-row"><strong>Imagery</strong><span>DOP20RGBI 2025 · Geoportal Berlin WMS</span></div><div className="modal-row"><strong>Buildings</strong><span>ALKIS Berlin Gebäude · Geoportal Berlin WFS</span></div><div className="modal-row"><strong>On-demand buildings</strong><span>OpenStreetMap · Overpass public endpoint · ODbL 1.0</span></div><div className="modal-row"><strong>Coordinate system</strong><span>ETRS89 / UTM zone 33N (EPSG:25833)</span></div><div className="modal-row"><strong>License</strong><span>dl-de/zero-2-0</span></div><p className="modal-note">ALKIS building areas are measured in UTM zone 33N. OSM building areas use a small-area spherical approximation. Both are mapping data, not model performance or AI confidence scores. Where available, the separate orange layer contains independently inferred model polygons, which are not validated for Berlin.</p><button className="primary-btn" onClick={() => setShowInfo(false)}><Check size={16}/> Understood</button></div></div>}
+    {showInfo && <div className="modal-overlay" onClick={() => setShowInfo(false)}><div className="modal" onClick={e => e.stopPropagation()}><button className="modal-close" onClick={() => setShowInfo(false)}><X size={20}/></button><div className="eyebrow">DATA PROVENANCE</div><h2>Real geospatial data. No simulated AI results.</h2><p>The default demonstration loads a small official Berlin orthophoto and official ALKIS building footprints acquired by Python during deployment. The dashed image border is the full downloaded extent; no additional orthophotos are downloaded on pan or zoom. Live AOI discovery separately queries building ways mapped by OpenStreetMap contributors through a public Overpass API endpoint. OSM coverage is not complete, its polygon areas are approximate, and the public API can be unavailable or rate limited. Neither dataset constitutes AI predictions. v0.6 spatial analysis and manual annotations work locally against the current loaded features, and sums full footprint areas for polygons intersecting an AOI or map viewport.</p><div className="modal-row"><strong>Imagery</strong><span>DOP20RGBI 2025 · Geoportal Berlin WMS</span></div><div className="modal-row"><strong>Buildings</strong><span>ALKIS Berlin Gebäude · Geoportal Berlin WFS</span></div><div className="modal-row"><strong>On-demand buildings</strong><span>OpenStreetMap · Overpass public endpoint · ODbL 1.0</span></div><div className="modal-row"><strong>Coordinate system</strong><span>ETRS89 / UTM zone 33N (EPSG:25833)</span></div><div className="modal-row"><strong>License</strong><span>dl-de/zero-2-0</span></div><p className="modal-note">ALKIS building areas are measured in UTM zone 33N. OSM building areas use a small-area spherical approximation. Both are mapping data, not model performance or AI confidence scores. Where available, the separate orange layer contains independently inferred model polygons, which are not validated for Berlin.</p><button className="primary-btn" onClick={() => setShowInfo(false)}><Check size={16}/> Understood</button></div></div>}
   </div>;
 }

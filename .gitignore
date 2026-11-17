@@ -30,3 +30,8 @@ checkpoints/
 # AI-generated example footprints can be intentionally published after review.
 !public/data/ai_buildings.geojson
 !public/data/ai_metadata.json
+
+# Keep unpublished annotation exports and local datasets out of public commits.
+annotations/
+exports/
+*manual-annotations*.geojson

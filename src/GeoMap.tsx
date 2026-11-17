@@ -3,6 +3,8 @@ import maplibregl, { Map, Popup, LngLatBounds } from 'maplibre-gl';
 import type { GeoJSONSource, LngLat } from 'maplibre-gl';
 import type { AoiBounds } from './services/overpass';
 import type { BuildingCollection, BuildingFeature, DatasetMeta } from './types';
+import { imageExtent, insideImage, makeRing } from './services/annotations';
+import type { Annotation, DrawingShape, Position } from './services/annotations';
 
 const baseStyle = 'https://tiles.openfreemap.org/styles/positron';
 const emptyFeatureCollection = { type: 'FeatureCollection' as const, features: [] };
@@ -52,30 +54,46 @@ type Props = {
   onCancelDrawing: () => void;
   onSelect: (feature: BuildingFeature | null) => void;
   onBoundsChange: (bounds: AoiBounds) => void;
+  annotations: Annotation[];
+  annotationMode: DrawingShape | null;
+  selectedAnnotationId: string | null;
+  onAnnotationCreate: (ring: Position[], shape: DrawingShape) => void;
+  onAnnotationSelect: (id: string) => void;
+  onAnnotationCancel: () => void;
+  onAnnotationError: (message: string) => void;
 };
 
 export default function GeoMap({
   meta, buildings, predictions, showPredictions, showOrthophoto, showBuildings, opacity, minArea, selectedId,
   resetToken, focusToken, expanded, sourceMode, aoi, drawingAoi,
   onAoiChange, onCancelDrawing, onSelect, onBoundsChange,
+  annotations, annotationMode, selectedAnnotationId, onAnnotationCreate, onAnnotationSelect, onAnnotationCancel, onAnnotationError,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Map | null>(null);
   const popupRef = useRef<Popup | null>(null);
   const firstCorner = useRef<LngLat | null>(null);
+  const annotationPoints = useRef<Position[]>([]);
+  const annotationRef = useRef(annotations);
+  const annotationModeRef = useRef(annotationMode);
+  const selectedAnnotationRef = useRef(selectedAnnotationId);
+  const imageBounds = imageExtent(meta.image_corners);
   const buildingRef = useRef(buildings);
   const predictionRef = useRef(predictions);
   const showPredictionsRef = useRef(showPredictions);
   const aoiRef = useRef(aoi);
   const drawingRef = useRef(drawingAoi);
-  const handlersRef = useRef({ onSelect, onAoiChange, onCancelDrawing, onBoundsChange });
+  const handlersRef = useRef({ onSelect, onAoiChange, onCancelDrawing, onBoundsChange, onAnnotationCreate, onAnnotationSelect, onAnnotationCancel, onAnnotationError });
   const settingsRef = useRef({ showOrthophoto, showBuildings, opacity, minArea, selectedId, sourceMode });
   buildingRef.current = buildings;
   predictionRef.current = predictions;
   showPredictionsRef.current = showPredictions;
   aoiRef.current = aoi;
   drawingRef.current = drawingAoi;
-  handlersRef.current = { onSelect, onAoiChange, onCancelDrawing, onBoundsChange };
+  annotationRef.current = annotations;
+  annotationModeRef.current = annotationMode;
+  selectedAnnotationRef.current = selectedAnnotationId;
+  handlersRef.current = { onSelect, onAoiChange, onCancelDrawing, onBoundsChange, onAnnotationCreate, onAnnotationSelect, onAnnotationCancel, onAnnotationError };
   settingsRef.current = { showOrthophoto, showBuildings, opacity, minArea, selectedId, sourceMode };
 
   useEffect(() => {
@@ -92,12 +110,35 @@ export default function GeoMap({
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'bottom-right');
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
 
+    const clearAnnotationDraft = () => {
+      annotationPoints.current = [];
+      (map.getSource('annotation-draft') as GeoJSONSource | undefined)?.setData(emptyFeatureCollection);
+    };
+    const finishAnnotation = () => {
+      if (annotationModeRef.current !== 'polygon') return;
+      try {
+        const ring = makeRing(annotationPoints.current, 'polygon', imageBounds);
+        handlersRef.current.onAnnotationCreate(ring, 'polygon');
+        clearAnnotationDraft();
+      } catch (error) {
+        handlersRef.current.onAnnotationError(error instanceof Error ? error.message : 'Invalid polygon.');
+      }
+    };
     const stopDrawing = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || !drawingRef.current) return;
-      firstCorner.current = null;
-      const source = map.getSource('aoi-preview') as GeoJSONSource | undefined;
-      source?.setData(emptyFeatureCollection);
-      handlersRef.current.onCancelDrawing();
+      if (event.key === 'Enter' && annotationModeRef.current === 'polygon') {
+        if (!(event.target instanceof HTMLElement && ['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].includes(event.target.tagName))) {
+          event.preventDefault(); finishAnnotation();
+        }
+      }
+      if (event.key !== 'Escape') return;
+      if (annotationModeRef.current) {
+        clearAnnotationDraft(); handlersRef.current.onAnnotationCancel(); return;
+      }
+      if (drawingRef.current) {
+        firstCorner.current = null;
+        (map.getSource('aoi-preview') as GeoJSONSource | undefined)?.setData(emptyFeatureCollection);
+        handlersRef.current.onCancelDrawing();
+      }
     };
     window.addEventListener('keydown', stopDrawing);
 
@@ -132,6 +173,23 @@ export default function GeoMap({
       map.addLayer({ id: 'aoi-outline', type: 'line', source: 'aoi-preview', paint: { 'line-color': '#e4f8fe', 'line-width': 2.4, 'line-dasharray': [2, 1.5] } });
       (map.getSource('aoi-preview') as GeoJSONSource).setData(aoiFeature(aoiRef.current));
 
+      map.addSource('manual-annotations', { type: 'geojson', data: { type: 'FeatureCollection', features: annotationRef.current } });
+      map.addLayer({ id: 'manual-annotations-fill', type: 'fill', source: 'manual-annotations',
+        paint: { 'fill-color': ['match', ['get', 'status'], 'accepted', '#34d399', 'rejected', '#94a3b8', '#a78bfa'], 'fill-opacity': 0.20 },
+      });
+      map.addLayer({ id: 'manual-annotations-lines', type: 'line', source: 'manual-annotations',
+        paint: { 'line-color': ['case', ['==', ['get', 'annotation_id'], selectedAnnotationRef.current ?? ''], '#f8fafc', ['match', ['get', 'status'], 'accepted', '#34d399', 'rejected', '#94a3b8', '#a78bfa']], 'line-width': 3 },
+      });
+      map.addSource('annotation-draft', { type: 'geojson', data: emptyFeatureCollection });
+      map.addLayer({ id: 'annotation-draft-fill', type: 'fill', source: 'annotation-draft', paint: { 'fill-color': '#e879f9', 'fill-opacity': 0.20 } });
+      map.addLayer({ id: 'annotation-draft-line', type: 'line', source: 'annotation-draft', paint: { 'line-color': '#f0abfc', 'line-width': 2.5, 'line-dasharray': [3, 1] } });
+      map.addLayer({ id: 'annotation-draft-point', type: 'circle', source: 'annotation-draft', paint: { 'circle-color': '#f0abfc', 'circle-radius': 5 } });
+      map.on('click', 'manual-annotations-fill', e => {
+        if (annotationModeRef.current || drawingRef.current) return;
+        const id = e.features?.[0]?.properties?.annotation_id;
+        if (typeof id === 'string') handlersRef.current.onAnnotationSelect(id);
+      });
+
       map.addSource('buildings', { type: 'geojson', data: buildingRef.current, promoteId: 'fid' });
       map.addLayer({ id: 'buildings-fill', type: 'fill', source: 'buildings',
         layout: { visibility: settings.showBuildings ? 'visible' : 'none' },
@@ -160,11 +218,13 @@ export default function GeoMap({
         layout: { visibility: showPredictionsRef.current ? 'visible' : 'none' },
         paint: { 'line-color': '#fb923c', 'line-width': 2.5, 'line-dasharray': [2, 1] },
       });
+      // Keep annotation geometry above reference and prediction layers for editing.
+      for (const id of ['manual-annotations-fill', 'manual-annotations-lines', 'annotation-draft-fill', 'annotation-draft-line', 'annotation-draft-point']) map.moveLayer(id);
       fitImage(map, meta);
       notifyViewport();
       let hovered: number | null = null;
       map.on('mousemove', 'buildings-fill', e => {
-        if (drawingRef.current) return;
+        if (drawingRef.current || annotationModeRef.current) return;
         const feature = e.features?.[0];
         if (!feature) return;
         const id = Number(feature.properties?.fid);
@@ -190,14 +250,48 @@ export default function GeoMap({
         map.getCanvas().style.cursor = drawingRef.current ? 'crosshair' : '';
       });
       map.on('click', 'buildings-fill', e => {
-        if (drawingRef.current) return;
+        if (drawingRef.current || annotationModeRef.current) return;
+        // A manual annotation is a separate, higher-priority editable layer.
+        if (map.queryRenderedFeatures(e.point, { layers: ['manual-annotations-fill'] }).length) return;
         const id = Number(e.features?.[0]?.properties?.fid);
         handlersRef.current.onSelect(buildingRef.current.features.find(f => f.properties.fid === id) ?? null);
       });
     });
 
     // Two-click rectangle selection is compatible with mouse, touch and trackpads.
+    const updateAnnotationPreview = (pointer?: Position) => {
+      const pts = [...annotationPoints.current];
+      if (pointer) pts.push(pointer);
+      const mode = annotationModeRef.current;
+      let feature: object | null = null;
+      if (mode === 'box' && pts.length >= 2) {
+        try { feature = { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [makeRing([pts[0], pts[pts.length - 1]], 'box', imageBounds)] } }; } catch { /* ignore zero-size preview */ }
+      } else if (mode === 'polygon' && pts.length >= 3) {
+        feature = { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[...pts, pts[0]]] } };
+      } else if (pts.length >= 2) feature = { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: pts } };
+      else if (pts.length === 1) feature = { type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: pts[0] } };
+      (map.getSource('annotation-draft') as GeoJSONSource | undefined)?.setData(feature ? { type: 'FeatureCollection', features: [feature] } as never : emptyFeatureCollection);
+    };
+    map.on('dblclick', e => {
+      if (annotationModeRef.current === 'polygon') { e.preventDefault(); finishAnnotation(); }
+    });
     map.on('click', e => {
+      if (annotationModeRef.current) {
+        const point: Position = [e.lngLat.lng, e.lngLat.lat];
+        if (!insideImage(point, imageBounds)) { handlersRef.current.onAnnotationError('Select only inside the yellow imagery boundary.'); return; }
+        annotationPoints.current.push(point);
+        if (annotationModeRef.current === 'box' && annotationPoints.current.length === 2) {
+          try {
+            const ring = makeRing(annotationPoints.current, 'box', imageBounds);
+            handlersRef.current.onAnnotationCreate(ring, 'box');
+            clearAnnotationDraft();
+          } catch (err) {
+            handlersRef.current.onAnnotationError(err instanceof Error ? err.message : 'Invalid box.');
+            clearAnnotationDraft();
+          }
+        } else updateAnnotationPreview();
+        return;
+      }
       if (!drawingRef.current) return;
       if (!firstCorner.current) { firstCorner.current = e.lngLat; return; }
       const bounds = fromCorners(firstCorner.current, e.lngLat);
@@ -205,6 +299,11 @@ export default function GeoMap({
       handlersRef.current.onAoiChange(bounds);
     });
     map.on('mousemove', e => {
+      if (annotationModeRef.current && annotationPoints.current.length) {
+        const pointer: Position = [e.lngLat.lng, e.lngLat.lat];
+        updateAnnotationPreview(insideImage(pointer, imageBounds) ? pointer : undefined);
+        return;
+      }
       if (!drawingRef.current || !firstCorner.current) return;
       (map.getSource('aoi-preview') as GeoJSONSource | undefined)
         ?.setData(aoiFeature(fromCorners(firstCorner.current, e.lngLat)));
@@ -264,19 +363,51 @@ export default function GeoMap({
   }, [selectedId]);
 
   useEffect(() => {
+    const map = mapRef.current;
+    (map?.getSource('manual-annotations') as GeoJSONSource | undefined)?.setData({ type: 'FeatureCollection', features: annotations });
+  }, [annotations]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map?.getLayer('manual-annotations-lines')) return;
+    map.setPaintProperty('manual-annotations-lines', 'line-color', ['case', ['==', ['get', 'annotation_id'], selectedAnnotationId ?? ''], '#f8fafc', ['match', ['get', 'status'], 'accepted', '#34d399', 'rejected', '#94a3b8', '#a78bfa']]);
+  }, [selectedAnnotationId]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    annotationPoints.current = [];
+    (map?.getSource('annotation-draft') as GeoJSONSource | undefined)?.setData(emptyFeatureCollection);
+    if (map) {
+      map.getCanvas().style.cursor = drawingAoi || annotationMode ? 'crosshair' : '';
+      if (annotationMode === 'polygon') map.doubleClickZoom.disable();
+      else map.doubleClickZoom.enable();
+    }
+  }, [annotationMode, drawingAoi]);
+
+  useEffect(() => {
     if (drawingAoi) {
       firstCorner.current = null;
       popupRef.current?.remove();
     }
     const map = mapRef.current;
-    if (map) map.getCanvas().style.cursor = drawingAoi ? 'crosshair' : '';
+    if (map) map.getCanvas().style.cursor = drawingAoi || !!annotationMode ? 'crosshair' : '';
     if (!drawingAoi) (map?.getSource('aoi-preview') as GeoJSONSource | undefined)?.setData(aoiFeature(aoi));
-  }, [drawingAoi, aoi]);
+  }, [drawingAoi, aoi, annotationMode]);
 
   useEffect(() => {
     const map = mapRef.current;
     (map?.getSource('aoi-preview') as GeoJSONSource | undefined)?.setData(aoiFeature(aoi));
   }, [aoi]);
+
+  useEffect(() => {
+    if (!selectedAnnotationId) return;
+    const map = mapRef.current;
+    const chosen = annotations.find(item => item.id === selectedAnnotationId);
+    if (!map || !chosen) return;
+    const bounds = new LngLatBounds();
+    chosen.geometry.coordinates[0].forEach(point => bounds.extend(point));
+    if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 85, duration: 350, maxZoom: 19.2 });
+  }, [selectedAnnotationId, annotations]);
 
   useEffect(() => {
     if (!resetToken) return;
@@ -302,5 +433,5 @@ export default function GeoMap({
     return () => cancelAnimationFrame(frame);
   }, [expanded]);
 
-  return <div ref={container} className="map-canvas" aria-label="Interactive geospatial map with draw-to-select AOI functionality"/>;
+  return <div ref={container} className="map-canvas" aria-label="Interactive geospatial map with AOI selection and manual imagery annotations"/>;
 }

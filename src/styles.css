@@ -82,3 +82,35 @@
 .prediction-warning { font-size: 11px; line-height: 1.55; color: #c3cbd6; padding: 10px 0 0; margin: 0; }
 .prediction-warning a { color: #ffb77d; text-decoration: underline; }
 .prediction-swatch { display: inline-block; width: 10px; height: 10px; border: 2px dashed #fb923c; margin-right: 5px; }
+
+/* v0.6 — public manual annotation workspace */
+.annotation-source{background:#c084fc!important}
+.annotation-panel{border:1px solid #67518b;background:linear-gradient(150deg,#201e38,#122436 72%);min-width:0}
+.annotation-panel .panel-title{flex-wrap:wrap;gap:6px}
+.annotation-panel select{box-sizing:border-box;width:100%;min-height:39px;border:1px solid #58627c;border-radius:7px;padding:9px;color:#f2ecff;background:#151f34;font:inherit;font-size:12px}
+.annotation-panel select:focus-visible,.annotation-input:focus-visible{outline:2px solid #d8b4fe;outline-offset:2px}
+.annotation-input{box-sizing:border-box;min-height:38px;width:100%;margin-top:9px;padding:9px;background:#111d2e;border:1px solid #7d679f;border-radius:7px;color:#f1e5ff;font-size:12px}
+.annotation-tools,.annotation-buttons{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin:12px 0 0}
+.annotation-tools button,.annotation-buttons button{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:1 1 auto;min-height:36px}
+.annotation-tools button:disabled,.annotation-buttons button:disabled{opacity:.45;cursor:not-allowed}
+.annotation-summary{display:grid;gap:4px;padding:12px;margin-top:13px;background:#211d37;border:1px solid #514773;border-radius:9px}
+.annotation-summary strong{font-size:18px;color:#e8d5ff}
+.annotation-summary span,.annotation-record{font-size:11px;color:#bbadd2}
+.annotation-notice{font-size:11px;line-height:1.55;background:#302747;border:1px solid #6d5187;padding:9px;border-radius:7px;color:#f3d6ff;overflow-wrap:anywhere}
+.annotation-guidance{background:#302041ed!important;border-color:#bd8fe0!important;color:#f6ddff!important}
+.annotation-details{display:grid;gap:8px;margin-top:14px;padding:12px;border:1px solid #756096;border-radius:8px;background:#1f2b42}
+.annotation-details strong{color:#f0e0ff;font-size:13px}
+.annotation-details label{font-size:11px;color:#b4a5c7}
+.annotation-details .annotation-buttons{margin-top:0}
+.annotation-details .danger-btn{color:#f5abb0;border-color:#915664}
+.annotation-list{margin-top:13px;max-height:190px;overflow-y:auto;border:1px solid #48526f;border-radius:8px}
+.annotation-list button{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;border:0;border-bottom:1px solid #384059;padding:9px 10px;background:#18273b;color:#e7d8f6;cursor:pointer;text-align:left;font-size:12px}
+.annotation-list button:last-child{border-bottom:0}
+.annotation-list button:hover,.annotation-list .active-annotation{background:#3c3154}
+.annotation-list small{font-size:10px;color:#b6a1d5}
+.annotation-clear{background:transparent;color:#f3b4bb;border:0;text-decoration:underline;font-size:10px;margin-top:12px;padding:5px;cursor:pointer}
+@media(max-width:1100px){.annotation-panel{grid-column:1/-1}}
+
+.annotation-rename-row{margin:0}
+.annotation-rename-row .annotation-input{margin-top:0;flex:2 1 110px;min-width:0}
+.annotation-rename-row button{flex:0 1 auto}
