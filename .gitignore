@@ -12,3 +12,11 @@ __pycache__/
 public/data/*.png
 public/data/*.geojson
 public/data/metadata.json
+
+# Keep personal AI prompts, planning and secrets out of public Git history.
+*PROMPT*.md
+*prompt*.md
+INTERNAL_*.md
+PRIVATE_*.md
+internal/
+planning/

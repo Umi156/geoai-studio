@@ -21,6 +21,8 @@ jobs:
           cache: pip
       - name: Install small Python geospatial toolchain
         run: pip install -r requirements.txt
+      - name: Verify Python geospatial code
+        run: python -m unittest discover -s tests -p "test_*.py" -v
       - name: Automatically obtain real Berlin GIS data
         run: python scripts/fetch_berlin.py
       - uses: actions/setup-node@v4
@@ -28,6 +30,8 @@ jobs:
           node-version: '22'
       - name: Install UI dependencies
         run: npm install --no-audit --no-fund
+      - name: Verify AOI geospatial logic
+        run: npm run test:geo
       - name: Build website
         run: npm run build
       - uses: actions/configure-pages@v5

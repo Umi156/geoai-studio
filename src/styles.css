@@ -22,3 +22,35 @@
 .panel-bar {height:auto;min-height:52px;padding-top:8px;padding-bottom:8px;flex-wrap:wrap}
 @media(max-width:1100px){.map-actions .sources-btn{display:none}}
 @media(max-width:530px){.map-actions{width:100%;justify-content:flex-start}.panel-bar{align-items:flex-start}.map-actions .small-btn{font-size:10px}.workspace-grid.map-expanded .map-wrap{min-height:500px}.inspector-details div{font-size:11px}}
+
+/* GeoAI Studio v0.3 — bounded AOI discovery. Accessible states, stable layout. */
+.aoi-panel{border-color:#395971;background:linear-gradient(145deg,#172c40,#102134)}
+.aoi-panel .panel-title{margin-bottom:9px}
+.aoi-beta{margin-left:auto;border:1px solid #3c7390;color:#8bdff0;background:#123348;padding:3px 6px;border-radius:4px;font-size:9px;letter-spacing:.6px}
+.aoi-intro,.aoi-disclaimer,.aoi-note{font-size:11px;line-height:1.65;color:#9cbbcd;margin:9px 0 12px}
+.aoi-disclaimer{font-size:10px;color:#7e9aac;border-top:1px solid #355065;padding-top:11px;margin-bottom:0}
+.aoi-buttons{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.aoi-outline-btn,.aoi-return-btn{border:1px solid #4c6a81;background:#21384c;color:#d6f1fb;padding:8px 11px;font-size:11px;font-weight:600;border-radius:7px}
+.aoi-outline-btn:hover,.aoi-return-btn:hover{background:#2b4a64}
+.aoi-metrics{display:grid;gap:5px;border:1px solid #39536a;border-radius:7px;padding:10px 12px;margin:11px 0;background:#0d2335}
+.aoi-metrics strong{font-size:10px;color:#a7c9dc}
+.aoi-metrics span{font-size:12px;color:#e4f5fa}
+.aoi-fetch-btn{display:block;width:100%;background:#48c3d5;border:0;border-radius:7px;color:#092331;padding:10px 13px;font-size:12px;font-weight:800;margin:10px 0}
+.aoi-fetch-btn:not(:disabled):hover{background:#76d7e5}
+.aoi-loading,.aoi-result{font-size:11px;line-height:1.5;color:#b8dfed;background:#193447;padding:11px;border-radius:7px;margin:10px 0}
+.aoi-loading button{background:transparent;color:#84ddeb;text-decoration:underline;border:0;padding:0 0 0 6px}
+.aoi-spinner{width:11px;height:11px;display:inline-block;border:2px solid #446680;border-top-color:#86e4ef;border-radius:50%;animation:aoi-spin 1s linear infinite;margin-right:5px;vertical-align:middle}
+@keyframes aoi-spin{to{transform:rotate(360deg)}}
+.aoi-error{font-size:11px!important;line-height:1.5;color:#ffb9a7!important;background:#4b282824;border:1px solid #895255;padding:8px 10px;border-radius:7px;margin:9px 0}
+.aoi-return-btn{margin-top:6px;width:100%;text-align:center}
+.community-status{background:#9a90f7}
+.legend-osm{background:#9a90f7;border-color:#c4b5fd}
+.drawing-active{border-color:#e5ce80!important;color:#ffe3a1!important;background:#3b3529!important}
+.aoi-guidance{position:absolute;z-index:4;top:58px;left:16px;max-width:min(440px,calc(100% - 36px));font-size:11px;line-height:1.5;padding:11px 14px;color:#f8e9ba;border:1px solid #b49f66;border-radius:8px;background:#302b25ed;display:flex;align-items:flex-start;gap:9px;pointer-events:none}
+.workspace-grid .control-column{align-content:start}
+.control-column .aoi-panel{grid-column:auto}
+@media(max-width:1100px){.workspace-grid .control-column{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:800px){.workspace-grid .control-column{grid-template-columns:1fr}}
+@media(max-width:530px){.aoi-guidance{top:65px;font-size:10px}}
+
+.footer a{color:#7ccfe1;text-decoration:underline;text-underline-offset:2px}
