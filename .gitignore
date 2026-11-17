@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+.env
+.env.*
+!.env.example
+.DS_Store
+# Generated assets are small but fetched automatically by CI or developer.
+public/data/*.png
+public/data/*.geojson
+public/data/metadata.json
