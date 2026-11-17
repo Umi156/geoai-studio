@@ -98,6 +98,10 @@ On pushes to `main`, GitHub Actions tests the Python GIS utilities, retrieves Be
 - Larger areas and reliable AI processing will require a backend, quotas, provenance, caching and an appropriate GPU strategy.
 - Library licenses, basemap terms and dataset usage conditions should be rechecked before commercializing.
 
-## Privacy and repository scope
+### Repository Standards
 
-The public repository should contain source code, automated tests and user-facing technical documentation only. Do not commit internal AI prompts, personal files, credentials or private planning notes. The `.gitignore` blocks common private-document patterns, but **already committed files must be removed from Git tracking explicitly**. Removing a file from a new commit does not erase previous Git history.
+This repository contains the application source code, automated tests, configuration files, and technical documentation required for development, maintenance, and deployment.
+
+Internal working documents, confidential information, credentials, and unrelated files are maintained separately from the public codebase.
+
+The `.gitignore` configuration helps prevent unnecessary or sensitive files from being tracked. Files previously committed must be removed from Git tracking separately. Removing a file in a later commit does not automatically remove it from the repository's history.
