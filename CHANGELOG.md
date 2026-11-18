@@ -1,3 +1,18 @@
+## [0.7.2] — 2026-11-18
+
+### Added
+- Optional OWL-ViT text-guided object detector for class labels such as cars, solar panels, buildings and possible waste piles, using tiled image inference and georeferenced reviewable boxes. It does not use the drawn example and has not been validated on aerial imagery.
+- Model output processing, bounding-box coordinate validation and export-provenance tests.
+- OWL-ViT technology badge in the README.
+
+### Fixed
+- Carry forward all v0.7.1 matching and diagnostic improvements for users still on v0.7.0.
+- Add repository `.npmrc` and GitHub Actions CLI option to skip unnecessary `onnxruntime-node` CUDA downloads.
+
+### Limitations
+- Initial ONNX model download can exceed 150 MB and CPU inference can be slow. Small objects may be missed. Live OWL-ViT inference and the full frontend build remain unverified.
+- No generated candidate data or fabricated accuracy claims are supplied.
+
 # Changelog
 
 ## [0.7.1] — 2026-11-18

@@ -1,6 +1,6 @@
 # GeoAI Studio
 
-**Interactive geospatial intelligence workspace — v0.7.1**
+**Interactive geospatial intelligence workspace — v0.7.2**
 
 [![Website](https://img.shields.io/badge/Live%20demo-GitHub%20Pages-0ea5e9)](https://umi156.github.io/geoai-studio/)
 
@@ -35,11 +35,12 @@ Badges link to the relevant tool documentation. The stack is reviewed whenever i
 [![GitHub Pages](https://img.shields.io/badge/GitHub_Pages-181717?style=for-the-badge&logo=github&logoColor=white)](https://docs.github.com/en/pages)
 [![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 
-**Browser-side visual search (on-demand)**
+**Browser-side visual search and optional object detection (on-demand)**
 
 [![Transformers.js](https://img.shields.io/badge/Transformers.js-FFD21E?style=for-the-badge&logo=huggingface&logoColor=black)](https://huggingface.co/docs/transformers.js/index)
 [![DINOv2](https://img.shields.io/badge/DINOv2-7C3AED?style=for-the-badge)](https://huggingface.co/Xenova/dinov2-small)
 [![ONNX Runtime Web](https://img.shields.io/badge/ONNX_Runtime_Web-005CED?style=for-the-badge)](https://onnxruntime.ai/docs/tutorials/web/)
+[![OWL-ViT](https://img.shields.io/badge/OWL--ViT-Zero--shot%20detection-6D28D9?style=for-the-badge)](https://huggingface.co/Xenova/owlvit-base-patch32)
 
 **Optional offline model processing** (not executed by GitHub Pages)
 
@@ -47,10 +48,18 @@ Badges link to the relevant tool documentation. The stack is reviewed whenever i
 [![Hugging Face](https://img.shields.io/badge/Hugging_Face-FFD21E?style=for-the-badge&logo=huggingface&logoColor=black)](https://huggingface.co/)
 [![Rasterio](https://img.shields.io/badge/Rasterio-277DA1?style=for-the-badge)](https://rasterio.readthedocs.io/)
 
+## Deployment and model-search reliability
+
+The v0.7.2 release combines all v0.7.1 image-matching improvements with a **separate text-guided OWL-ViT detector**. For cars, rooftop panels and other named classes, select **OWL-ViT object detection by class**. Unlike exemplar-based similarity, this model uses the selected class phrase, **not** the drawn example box. It scans four 512 × 512 image tiles and returns genuine, unvalidated detection boxes only if the model identifies candidates. First use downloads a relatively large quantized model (~155 MB); CPU inference may be slow and small objects or unusual aerial viewpoints may not be detected. No simulated detections or false success states are supplied.
+
+For distinctive repeated roofs and near-identical objects, **Fast image matching** remains available. Its classical pattern-correlation approach does not require model weights but is not semantic object detection. DINOv2 embedding similarity remains a bounded experimental option and may yield zero proposals.
+
+The repository `.npmrc` contains `onnxruntime-node-install-cuda=skip`; GitHub Actions also passes this installation option so browser-oriented builds do not attempt to download unused Linux CUDA components. A successful frontend production build and live OWL-ViT inference must still be verified in GitHub Actions and a real browser.
+
 ## Features
 
-- **Object Detection Studio (v0.7.1):** separate full-width MapLibre workspace for selecting an example on the existing Berlin orthophoto, initiating image-embedding similarity search, reviewing candidates and exporting GeoJSON.
-- **Fast pixel-template matching (v0.7.1):** User-initiated multi-scale search of local imagery, reporting actual sampled-pattern correlation. It requires no model download. This is classical image matching, not a pretrained semantic detector.
+- **Object Detection Studio (v0.7.2):** separate full-width MapLibre workspace for selecting an example on the existing Berlin orthophoto, initiating image-embedding similarity search, reviewing candidates and exporting GeoJSON.
+- **Fast pixel-template matching (v0.7.2):** User-initiated multi-scale search of local imagery, reporting actual sampled-pattern correlation. It requires no model download. This is classical image matching, not a pretrained semantic detector.
 - **Pretrained visual embeddings (optional):** DINOv2-small through Transformers.js / ONNX Runtime Web; the browser fetches the public model weights on first use and scans a maximum of 64 multi-scale image windows. The results are *proposals*, **not** exhaustive object detections or segmentation masks.
 - **Explicit review and provenance:** accept/reject each match; exports include model ID, similarity score (not probability), source, imagery year, review status and sampling limits. The model-search layer is separate from manual annotations and ALKIS reference footprints.
 
@@ -97,11 +106,11 @@ OSM buildings returned by a bounding-box query may partly lie beyond the selecte
 1. Open the deployed site and choose **Object Detection Studio** in the left workspace navigation. This is a dedicated view; the original GeoAI Explorer remains available.
 2. Choose a class (solar panels, vehicles, suspected waste sites, buildings, vegetation, or another category).
 3. Click **Draw example box** and click two opposite corners around one object **within the yellow aerial-image boundary**. Alternatively select an existing manual annotation from v0.6.
-4. Choose a **Search method**: Fast image matching for full-orthophoto local pattern matching, or DINOv2 visual embeddings for an optional model-assisted pilot. Adjust the corresponding score threshold and click **Find Similar Objects**. DINOv2 weights are downloaded to the browser on first use (requires access to Hugging Face).
-5. The image-matching mode scans the cached imagery using multi-scale pixel brightness-pattern correlations. DINOv2 compares a bounded maximum of 64 sampled image windows using pretrained embeddings. Both display comparisons examined, top observed score, warnings and any proposed boxes directly in the search panel. Open the candidate list to review, accept or reject suggestions.
+4. Choose a **Search method**: Fast image matching, experimental DINOv2 visual similarity, or OWL-ViT for class-guided detection (which does not use your example box). Adjust the corresponding score threshold and click **Find Similar Objects**. DINOv2 weights are downloaded to the browser on first use (requires access to Hugging Face).
+5. Fast matching scans the cached imagery using multi-scale pixel brightness-pattern correlations. DINOv2 compares at most 64 sampled image windows; OWL-ViT runs class-guided inference across four 512px tiles. Both display comparisons examined, top observed score, warnings and any proposed boxes directly in the search panel. Open the candidate list to review, accept or reject suggestions.
 6. Export georeferenced result boxes in GeoJSON. Scores are either brightness-pattern correlation (fast mode) or embedding cosine similarity (DINOv2), **not calibrated probabilities of detection**; the results are **not** automatically imported as manual ground truth.
 
-**Scope and limitations:** v0.7.1 provides a local pattern-matching method alongside a pretrained-model visual similarity pilot; neither is an instance segmentation system. There is no live retraining, no guaranteed class-specific recognition, no SAM 3 integration, and no exhaustive search of all objects. Small cars and rooftop panels may be too small at the current 20 cm/pixel image resolution to yield distinctive embeddings. False positives and missed objects are expected; always review results manually. A scan runs locally in the visitor's browser on the downloaded 1024 × 1024 Berlin image, not on the remote Overpass service, and cannot process arbitrary cities until imagery services and bounded inference have been integrated. The pretrained source model [facebook/dinov2-small](https://huggingface.co/facebook/dinov2-small) is Apache-2.0; verify the source dataset and model usage policies before commercial deployment. ONNX-quantized weights are supplied by [Xenova/dinov2-small](https://huggingface.co/Xenova/dinov2-small).
+**Scope and limitations:** v0.7.2 provides a local pattern-matching method alongside a pretrained-model visual similarity pilot; neither is an instance segmentation system. There is no live retraining, no guaranteed class-specific recognition, no SAM 3 integration, and no exhaustive search of all objects. Small cars and rooftop panels may be too small at the current 20 cm/pixel image resolution to yield distinctive embeddings. False positives and missed objects are expected; always review results manually. A scan runs locally in the visitor's browser on the downloaded 1024 × 1024 Berlin image, not on the remote Overpass service, and cannot process arbitrary cities until imagery services and bounded inference have been integrated. The pretrained source model [facebook/dinov2-small](https://huggingface.co/facebook/dinov2-small) is Apache-2.0; verify the source dataset and model usage policies before commercial deployment. ONNX-quantized weights are supplied by [Xenova/dinov2-small](https://huggingface.co/Xenova/dinov2-small).
 
 **Performance and privacy:** only DINOv2 mode downloads model assets from Hugging Face on its first run. Fast image matching operates directly on the cached aerial photograph. Cropped image windows are processed on-device rather than uploaded to an inference API. Model downloads can fail or be blocked by browser/network restrictions; slower CPUs can take a long time per scan. Clicking cancel takes effect after the current model operation. These search prototypes are not production SLA-backed detectors; use a separately provisioned backend and a validated detection or segmentation model for demanding workloads.
 
@@ -124,6 +133,8 @@ src/App.tsx                  Explorer navigation, dashboard, filters and AOI wor
 src/ObjectDetectionStudio.tsx  Dedicated visual example/search/review interface
 src/services/similarity.ts    Image-window sampling, cosine similarity, NMS and geospatial export
 src/services/templateMatch.ts Browser-local sampled pixel-template matching and diagnostics
+src/services/zeroShotDetector.ts OWL-ViT text-guided detection model and coordinate conversion
+tests/zeroShotDetector.test.mjs   Class prompts, model box conversion and export checks
 tests/templateMatch.test.mjs  Synthetic-image retrieval, cancellation and error tests
 src/services/exemplarModel.ts Pretrained browser inference adapter (on-demand)
 tests/similarity.test.mjs     Visual search geometry, scoring, export and limits

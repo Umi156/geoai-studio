@@ -8,6 +8,7 @@ import { boundsFromCorners, boxFromPixels, geoToPixel, polygonForBox, exportDete
 import type { PixelBox, SimilarityDetection, SearchEngine } from './services/similarity';
 import { findSimilarInImage } from './services/exemplarModel';
 import { findTemplateMatches } from './services/templateMatch';
+import { findObjectsByText, ZERO_SHOT_MODEL_ID, promptForClass } from './services/zeroShotDetector';
 
 const BASE_STYLE = 'https://tiles.openfreemap.org/styles/positron';
 const CLASSES = [
@@ -122,7 +123,7 @@ export default function ObjectDetectionStudio({meta,annotations}:{meta:DatasetMe
     catch(e){setNotice(e instanceof Error?e.message:'Invalid annotation extent.');}
   };
   const scan=async()=>{
-    if(!exemplar||!meta||!imageBounds||scanning)return;
+    if((engine!=='owlvit'&&!exemplar)||!meta||!imageBounds||scanning)return;
     setScanning(true);setNotice('');setResults([]);setExamined(0);setBestScore(null);cancelRef.current=false;
     let bitmap:ImageBitmap|null=null;
     try{
@@ -130,24 +131,26 @@ export default function ObjectDetectionStudio({meta,annotations}:{meta:DatasetMe
       const response=await fetch(`${import.meta.env.BASE_URL}data/berlin_orthophoto.png`);
       if(!response.ok)throw new Error('Aerial image unavailable. Rebuild the Berlin demo assets.');
       bitmap=await createImageBitmap(await response.blob());
-      if(bitmap.width!==DIMENSION||bitmap.height!==DIMENSION)throw new Error('Unexpected image dimensions; the example cannot be correctly georeferenced.');
-      const result=engine==='template'
-        ? await findTemplateMatches(bitmap,exemplar,threshold,setProgress,()=>cancelRef.current)
-        : await findSimilarInImage(bitmap,exemplar,threshold,setProgress,()=>cancelRef.current);
+      if(bitmap.width!==DIMENSION||bitmap.height!==DIMENSION)throw new Error('Unexpected imagery dimensions; detection cannot be accurately georeferenced.');
+      const result=engine==='owlvit'
+        ? await findObjectsByText(bitmap,className,threshold,setProgress,()=>cancelRef.current)
+        : engine==='template'
+          ? await findTemplateMatches(bitmap,exemplar!,threshold,setProgress,()=>cancelRef.current)
+          : await findSimilarInImage(bitmap,exemplar!,threshold,setProgress,()=>cancelRef.current);
       if(cancelRef.current)return;
       setExamined(result.examined);
       setBestScore(result.bestScore);
       const detections=result.hits.map((hit,i)=>({...hit,id:`similar-${i+1}`,className,review:'unreviewed' as const}));
       setResults(detections);
-      const method=engine==='template'?'local pixel-template matching':`DINOv2 (${MODEL_ID})`;
-      setNotice(`Completed ${result.examined.toLocaleString()} comparisons using ${method}. ${detections.length} proposals passed ${threshold.toFixed(2)}. ${result.bestScore===null?'No comparable regions.':`Best observed score: ${result.bestScore.toFixed(3)}.`} ${detections.length===0?'No regions met your threshold; try a larger example, a smaller threshold, or switch search methods.':'Review each proposed match; these are not verified detections.'}`);
+      const method=engine==='template'?'local pixel-template matching':engine==='owlvit'?`OWL-ViT (${ZERO_SHOT_MODEL_ID})`:`DINOv2 (${MODEL_ID})`;
+      setNotice(`Completed ${result.examined.toLocaleString()} ${engine==='owlvit'?'image tiles':'comparisons'} using ${method}. ${detections.length} proposals passed ${threshold.toFixed(2)}. ${result.bestScore===null?'No comparable regions.':`Best observed score: ${result.bestScore.toFixed(3)}.`} ${detections.length===0?'No candidate met the threshold; results cannot be guaranteed on this imagery. Try a different class or detection method.':'Review each proposed match; these are not verified detections.'}`);
     }catch(e){if(!cancelRef.current)setNotice(e instanceof Error?`Scan unavailable: ${e.message}`:'The scan failed.');}
     finally{bitmap?.close();setScanning(false);}
   };
   const clear=()=>{cancelRef.current=true;setResults([]);setSelected(null);setExemplar(null);setDrawing(false);firstCornerRef.current=null;setExamined(0);setBestScore(null);setNotice('New session ready.');};
   return <div className="od-workspace">
     <header className="od-heading"><div><div className="eyebrow"><Crosshair size={14}/> GEOINTELLIGENCE / VISUAL SEARCH</div><h1>Object Detection Studio</h1><p>Draw an example, compare real image regions, review proposals, and export georeferenced results.</p></div><span className="od-pill">EXPERIMENTAL VISUAL SEARCH</span></header>
-    <div className="od-stat-strip"><span><Layers size={15}/> Berlin orthophoto <strong>{meta?.imagery_year??'—'}</strong></span><span>Image coverage <strong>200 × 200 m</strong></span><span>Examined windows <strong>{examined}</strong></span><span>Proposals <strong>{results.length}</strong></span><span>Accepted <strong>{results.filter(d=>d.review==='accepted').length}</strong></span></div>
+    <div className="od-stat-strip"><span><Layers size={15}/> Berlin orthophoto <strong>{meta?.imagery_year??'—'}</strong></span><span>Image coverage <strong>200 × 200 m</strong></span><span>Compared regions / tiles <strong>{examined}</strong></span><span>Proposals <strong>{results.length}</strong></span><span>Accepted <strong>{results.filter(d=>d.review==='accepted').length}</strong></span></div>
     <div className="od-grid">
       <section className="od-map-column"><div className="od-map-header"><strong><SquareDashedMousePointer size={17}/> Visual search map</strong><div><button onClick={()=>mapRef.current?.fitBounds([[imageBounds?.west??13.4,imageBounds?.south??52.5],[imageBounds?.east??13.41,imageBounds?.north??52.52]],{padding:46,maxZoom:19})}><RotateCcw size={14}/> Reset view</button><button onClick={()=>{firstCornerRef.current=null;setDrawing(d=>!d);setNotice('Select two opposite corners inside the aerial photograph.');}} disabled={!meta||scanning}><SquareDashedMousePointer size={14}/> {drawing?'Cancel drawing':'Draw example'}</button></div></div>
         <div className={`od-map ${drawing?'od-drawing':''}`} ref={containerRef} role="region" aria-label="Interactive aerial imagery for object search"/>
@@ -159,27 +162,28 @@ export default function ObjectDetectionStudio({meta,annotations}:{meta:DatasetMe
           {exemplar&&<div className="od-detail-success"><CheckCircle2 size={15}/> Example selected: {Math.round(exemplar.width)} × {Math.round(exemplar.height)} pixels</div>}
           {annotations.length>0&&<><label htmlFor="od-previous">Reuse a manual annotation</label><select id="od-previous" value="" onChange={e=>{const found=annotations.find(a=>a.id===e.target.value);if(found)useAnnotation(found);}}><option value="">Choose an annotation…</option>{annotations.filter(a=>a.properties.status!=='rejected').slice(-100).map(a=><option key={a.id} value={a.id}>{a.properties.class_name} · {a.id.slice(-6)}</option>)}</select></>}
         </section>
-        <section className="od-card"><div className="od-step">02 / FIND SIMILAR</div><h2>Find similar image regions</h2><p>Choose between local pixel-template matching and model-assisted DINOv2 embeddings. Both produce reviewable candidates, not verified object detections.</p>
+        <section className="od-card"><div className="od-step">02 / FIND SIMILAR</div><h2>Find similar image regions</h2><p>Choose a matching method or try genuine text-guided OWL-ViT object detection. All results must be reviewed.</p>
           <label htmlFor="od-engine">Search method</label>
-          <select id="od-engine" value={engine} disabled={scanning} onChange={e=>{const next=e.target.value as SearchEngine;setEngine(next);setThreshold(next==='template'?.62:.72);setResults([]);setExamined(0);setBestScore(null);setNotice('Search method updated. Run a new scan to compare the example.');}}>
+          <select id="od-engine" value={engine} disabled={scanning} onChange={e=>{const next=e.target.value as SearchEngine;setEngine(next);setThreshold(next==='template'?.62:next==='owlvit'?.08:.72);setResults([]);setExamined(0);setBestScore(null);setNotice('Search method updated. OWL-ViT uses the selected class name; other modes use your example box.');}}>
             <option value="template">Fast image matching (on-device, no download)</option>
             <option value="dinov2">DINOv2 visual embeddings (model download)</option>
+            <option value="owlvit">OWL-ViT object detection by class (large download)</option>
           </select>
-          <p className="od-muted">{engine==='template'?'Matches repeated visual textures and shapes across the full aerial image; not semantic AI detection.':'Pretrained model compares up to 64 sampled windows; small objects can be missed.'}</p>
-          <label htmlFor="od-threshold">Minimum {engine==='template'?'pattern correlation':'cosine similarity'} <strong>{threshold.toFixed(2)}</strong></label>
-          <input id="od-threshold" type="range" min={engine==='template'?'0.30':'0.40'} max="0.98" step="0.01" value={threshold} onChange={e=>setThreshold(Number(e.target.value))} disabled={scanning}/>
-          <button className="od-primary od-contrast" disabled={!exemplar||scanning||!imageReady} onClick={()=>{void scan();}}>{scanning?<LoaderCircle size={16} className="od-spin"/>:<Search size={16}/>} {scanning?'Scanning image…':'Find Similar Objects'}</button>
+          <p className="od-muted">{engine==='template'?'Matches similar-looking patterns across the complete image, not necessarily objects.':engine==='owlvit'?`Searches the image for “${promptForClass(className)}” using four 512px tiles. Your drawn box is NOT used by this text-guided model. Initial download is large and CPU inference may be slow.`:'Compares up to 64 sampled windows; small objects can be missed.'}</p>
+          <label htmlFor="od-threshold">Minimum {engine==='template'?'pattern correlation':engine==='owlvit'?'detection score':'cosine similarity'} <strong>{threshold.toFixed(2)}</strong></label>
+          <input id="od-threshold" type="range" min={engine==='template'?'0.30':engine==='owlvit'?'0.01':'0.40'} max={engine==='owlvit'?'0.50':'0.98'} step="0.01" value={threshold} onChange={e=>setThreshold(Number(e.target.value))} disabled={scanning}/>
+          <button className="od-primary od-contrast" disabled={(engine!=='owlvit'&&!exemplar)||scanning||!imageReady} onClick={()=>{void scan();}}>{scanning?<LoaderCircle size={16} className="od-spin"/>:<Search size={16}/>} {scanning?'Scanning image…':engine==='owlvit'?'Detect Selected Class':'Find Similar Objects'}</button>
           {scanning&&<><div className="od-progress"><span style={{width:progress.total>0?`${100*progress.completed/progress.total}%`:'4%'}}/></div><div className="od-muted">{progress.stage}</div><button className="od-secondary" onClick={()=>{cancelRef.current=true;setNotice('Stopping after the current model operation…');}}>Cancel search</button></>}
-          {!scanning&&examined>0&&<div className="od-detail-success" role="status">Examined {examined.toLocaleString()} windows · Best score {bestScore===null?'—':bestScore.toFixed(3)} · {results.length} above threshold</div>}
+          {!scanning&&examined>0&&<div className="od-detail-success" role="status">Examined {examined.toLocaleString()} {engine==='owlvit'?'tiles':'windows'} · Best score {bestScore===null?'—':bestScore.toFixed(3)} · {results.length} above threshold</div>}
           {notice&&<div className="od-notice od-inline-notice" role="status">{notice}</div>}
-          <div className="od-callout"><ShieldCheck size={15}/> {engine==='template'?'Pattern matching runs locally without downloading model weights. It is sensitive to object rotation, size and appearance.':'DINOv2 runs in your browser; first use downloads weights from Hugging Face. Up to 64 windows are sampled.'} No Overpass API is involved.</div>
+          <div className="od-callout"><ShieldCheck size={15}/> {engine==='template'?'Pattern matching runs locally without model downloads, but may miss different-looking objects.':engine==='owlvit'?'OWL-ViT loads a large pretrained model and performs class-guided inference. Small aerial objects and unusual viewpoints may be missed.':'DINOv2 downloads model weights and samples at most 64 windows.'} No Overpass API is involved.</div>
         </section>
-        <section className="od-card od-results"><div className="od-step">03 / REVIEW RESULTS</div><div className="od-results-top"><h2>Candidate objects</h2><strong>{results.length}</strong></div>{results.length? <><div className="od-results-list">{results.map(d=><button key={d.id} className={selected===d.id?'od-selected':''} onClick={()=>{setSelected(d.id);if(imageBounds) {const [lon,lat]=[d.box.x+d.box.width/2,d.box.y+d.box.height/2];const b=imageBounds;mapRef.current?.flyTo({center:[b.west+lon/DIMENSION*(b.east-b.west),b.north-lat/DIMENSION*(b.north-b.south)],zoom:19,maxDuration:700});}}}><span>{d.className.replaceAll('_',' ')} <small>{d.review}</small></span><strong>{d.similarity.toFixed(3)}</strong></button>)}</div>{selectedHit&&<div className="od-review-actions"><button onClick={()=>changeReview(selectedHit.id,'accepted')}><CheckCircle2 size={15}/> Accept</button><button onClick={()=>changeReview(selectedHit.id,'rejected')}><XCircle size={15}/> Reject</button></div>}</> : <p>No candidates yet. Choose an example and run a scan. Low-resolution objects or challenging imagery may produce no reliable matches.</p>}
-          <div className="od-export-actions"><button disabled={!results.length||!exemplar||!imageBounds} onClick={()=>{if(!exemplar||!imageBounds||!meta)return;downloadFile(exportDetections(results,exemplar,imageBounds,DIMENSION,DIMENSION,meta.imagery_year,examined,engine),'geoai_similarity_candidates.geojson');}}><ArrowDownToLine size={14}/> Export GeoJSON</button><button onClick={clear} disabled={scanning}><Trash2 size={14}/> Clear</button></div>
+        <section className="od-card od-results"><div className="od-step">03 / REVIEW RESULTS</div><div className="od-results-top"><h2>Candidate objects</h2><strong>{results.length}</strong></div>{results.length? <><div className="od-results-list">{results.map(d=><button key={d.id} className={selected===d.id?'od-selected':''} onClick={()=>{setSelected(d.id);if(imageBounds) {const [lon,lat]=[d.box.x+d.box.width/2,d.box.y+d.box.height/2];const b=imageBounds;mapRef.current?.flyTo({center:[b.west+lon/DIMENSION*(b.east-b.west),b.north-lat/DIMENSION*(b.north-b.south)],zoom:19,maxDuration:700});}}}><span>{d.className.replaceAll('_',' ')} <small>{d.review}</small></span><strong>{d.similarity.toFixed(3)}</strong></button>)}</div>{selectedHit&&<div className="od-review-actions"><button onClick={()=>changeReview(selectedHit.id,'accepted')}><CheckCircle2 size={15}/> Accept</button><button onClick={()=>changeReview(selectedHit.id,'rejected')}><XCircle size={15}/> Reject</button></div>}</> : <p>No proposals yet. For OWL-ViT choose a class; for other methods choose an example box. Low-resolution objects or challenging imagery may produce no reliable matches.</p>}
+          <div className="od-export-actions"><button disabled={!results.length||(engine!=='owlvit'&&!exemplar)||!imageBounds} onClick={()=>{if((engine!=='owlvit'&&!exemplar)||!imageBounds||!meta)return;downloadFile(exportDetections(results,exemplar,imageBounds,DIMENSION,DIMENSION,meta.imagery_year,examined,engine),'geoai_similarity_candidates.geojson');}}><ArrowDownToLine size={14}/> Export GeoJSON</button><button onClick={clear} disabled={scanning}><Trash2 size={14}/> Clear</button></div>
         </section>
       </aside>
     </div>
     
-    <p className="od-disclaimer">Research preview. Candidate-box visual search is neither dense object detection nor instance segmentation. Pixel-template matching can miss rotated or visually different objects; the 64-window DINOv2 scan can miss small objects. Manually review all detections. Model weights and imagery remain subject to their respective terms.</p>
+    <p className="od-disclaimer">Research preview. Matching and DINOv2 are not exhaustive object detection; OWL-ViT is a genuine text-guided detector, not example-trained or segmentation. Pixel-template matching can miss rotated or visually different objects; the 64-window DINOv2 scan can miss small objects. Manually review all detections. Model weights and imagery remain subject to their respective terms.</p>
   </div>;
 }

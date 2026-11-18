@@ -283,7 +283,7 @@ export default function App() {
       <div className="source-row"><div className="source-status prediction-status"/><span><strong>Building segmentation</strong><small>{predictions ? 'Predictions available · unvalidated' : 'Offline model stage · optional'}</small></span></div>
       <div className="sidebar-bottom">
         <div className="groundtruth"><ShieldCheck size={17}/><div><strong>{sourceMode === 'osm' ? 'Community map data' : 'Official reference data'}</strong><p>{sourceMode === 'osm' ? 'OpenStreetMap contributors · not AI inference.' : 'Berlin ALKIS footprints · not AI inference.'}</p></div></div>
-        <div className="version">GEOAI STUDIO <span>v0.7.1</span></div>
+        <div className="version">GEOAI STUDIO <span>v0.7.2</span></div>
       </div>
     </aside>
 
