@@ -155,3 +155,6 @@
 .od-spin{animation:odrotate 1.2s linear infinite}@keyframes odrotate{to{transform:rotate(360deg)}}
 @media(max-width:1150px){.od-grid{grid-template-columns:minmax(0,1fr)}.od-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.od-results{grid-column:1/-1}.od-map{height:70vh}}
 @media(max-width:730px){.detection-content{padding:18px 12px}.od-heading{align-items:flex-start;flex-direction:column}.od-controls{grid-template-columns:1fr}.od-results{grid-column:auto}.od-map{min-height:430px;height:60vh}.od-map-header{align-items:flex-start}.od-stat-strip{gap:10px}.od-pill{font-size:9px}}
+
+/* Search status stays visible beside the search control. */
+.od-inline-notice{margin:0;font-size:12px;overflow-wrap:anywhere}

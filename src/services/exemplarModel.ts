@@ -3,7 +3,7 @@ import { MODEL_ID, cosineSimilarity, sampleWindows, rankAndSuppress, MAX_SCAN_WI
 import type { PixelBox, SimilarityHit } from './similarity';
 
 export type ScanProgress = { completed: number; total: number; stage: string };
-export type ScanResult = { hits: SimilarityHit[]; examined: number; model: string };
+export type ScanResult = { hits: SimilarityHit[]; examined: number; model: string; bestScore: number | null };
 
 function cropAsDataUrl(image: ImageBitmap, box: PixelBox): string {
   const canvas=document.createElement('canvas');
@@ -45,5 +45,5 @@ export async function findSimilarInImage(image: ImageBitmap, example: PixelBox, 
     // Yield control so the progress UI and cancel button stay responsive.
     await new Promise<void>(resolve=>setTimeout(resolve,0));
   }
-  return {hits:rankAndSuppress(samples,threshold,16),examined:samples.length,model:MODEL_ID};
+  return {hits:rankAndSuppress(samples,threshold,16),examined:samples.length,model:MODEL_ID,bestScore:samples.length ? Math.max(...samples.map(s=>s.similarity)) : null};
 }

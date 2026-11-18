@@ -7,6 +7,7 @@ export type SimilarityDetection = SimilarityHit & { id: string; className: strin
 
 export const MODEL_ID = 'Xenova/dinov2-small';
 export const MAX_SCAN_WINDOWS = 64;
+export type SearchEngine = 'template' | 'dinov2';
 
 export function boundsFromCorners(corners: number[][]): ImageBounds {
   if (corners.length !== 4 || corners.some(v => v.length !== 2 || v.some(n => !Number.isFinite(n)))) throw new Error('Invalid image georeferencing');
@@ -97,7 +98,10 @@ export function rankAndSuppress(hits: SimilarityHit[], threshold: number, maxRes
   for(const hit of ranked){if(kept.length>=maxResults)break;if(kept.every(other=>overlapIoU(other.box,hit.box)<0.35))kept.push(hit);}
   return kept;
 }
-export function exportDetections(detections: SimilarityDetection[], exemplar: PixelBox, b: ImageBounds, width: number, height: number, imageryYear: number, examined: number): string {
-  const features = detections.map(hit=>({type:'Feature' as const,id:hit.id,geometry:{type:'Polygon' as const,coordinates:polygonForBox(hit.box,b,width,height)},properties:{detection_id:hit.id,class_name:hit.className,similarity_score:Number(hit.similarity.toFixed(4)),review_status:hit.review,origin:'model_similarity_candidate',model:MODEL_ID}}));
-  return JSON.stringify({type:'FeatureCollection',features,metadata:{schema:'geoai-similarity-v1',crs:'EPSG:4326',model:MODEL_ID,method:'DINOv2 image embeddings; bounded multi-scale sliding-window similarity and NMS',score_definition:'cosine similarity, not calibrated object probability',evaluation_status:'unvalidated exploratory results',annotation_source:'one human-selected exemplar box',exemplar_pixel_box:exemplar,imagery:'Geoportal Berlin DOP RGB',imagery_year:imageryYear,windows_evaluated:examined,imagery_boundary:b,georeferencing:'image-coordinate affine approximation; not survey-grade',source_license:'dl-de/zero-2-0'}},null,2);
+export function exportDetections(detections: SimilarityDetection[], exemplar: PixelBox, b: ImageBounds, width: number, height: number, imageryYear: number, examined: number, engine: SearchEngine = 'dinov2'): string {
+  const model = engine === 'dinov2' ? MODEL_ID : 'none';
+  const method = engine === 'dinov2' ? 'DINOv2 image embeddings; bounded multi-scale sliding-window similarity and NMS' : 'Local pixel-template normalized cross-correlation; 8x8 brightness sampling, multi-scale scanning and NMS';
+  const scoreDefinition = engine === 'dinov2' ? 'cosine similarity, not calibrated object probability' : 'normalized cross-correlation of sampled pixel brightness, not calibrated object probability';
+  const features = detections.map(hit=>({type:'Feature' as const,id:hit.id,geometry:{type:'Polygon' as const,coordinates:polygonForBox(hit.box,b,width,height)},properties:{detection_id:hit.id,class_name:hit.className,similarity_score:Number(hit.similarity.toFixed(4)),review_status:hit.review,origin:engine === 'dinov2' ? 'model_similarity_candidate' : 'image_template_candidate',model,method:engine}}));
+  return JSON.stringify({type:'FeatureCollection',features,metadata:{schema:'geoai-similarity-v1',crs:'EPSG:4326',model,method,score_definition:scoreDefinition,search_engine:engine,evaluation_status:'unvalidated exploratory results',annotation_source:'one human-selected exemplar box',exemplar_pixel_box:exemplar,imagery:'Geoportal Berlin DOP RGB',imagery_year:imageryYear,windows_evaluated:examined,imagery_boundary:b,georeferencing:'image-coordinate affine approximation; not survey-grade',source_license:'dl-de/zero-2-0'}},null,2);
 }

@@ -1,6 +1,6 @@
 # GeoAI Studio
 
-**Interactive geospatial intelligence workspace — v0.7.0**
+**Interactive geospatial intelligence workspace — v0.7.1**
 
 [![Website](https://img.shields.io/badge/Live%20demo-GitHub%20Pages-0ea5e9)](https://umi156.github.io/geoai-studio/)
 
@@ -49,8 +49,9 @@ Badges link to the relevant tool documentation. The stack is reviewed whenever i
 
 ## Features
 
-- **Object Detection Studio (v0.7):** separate full-width MapLibre workspace for selecting an example on the existing Berlin orthophoto, initiating image-embedding similarity search, reviewing candidates and exporting GeoJSON.
-- **Pretrained visual embeddings:** DINOv2-small through Transformers.js / ONNX Runtime Web; the browser fetches the public model weights on first use and scans a maximum of 64 multi-scale image windows. The results are *proposals*, **not** exhaustive object detections or segmentation masks.
+- **Object Detection Studio (v0.7.1):** separate full-width MapLibre workspace for selecting an example on the existing Berlin orthophoto, initiating image-embedding similarity search, reviewing candidates and exporting GeoJSON.
+- **Fast pixel-template matching (v0.7.1):** User-initiated multi-scale search of local imagery, reporting actual sampled-pattern correlation. It requires no model download. This is classical image matching, not a pretrained semantic detector.
+- **Pretrained visual embeddings (optional):** DINOv2-small through Transformers.js / ONNX Runtime Web; the browser fetches the public model weights on first use and scans a maximum of 64 multi-scale image windows. The results are *proposals*, **not** exhaustive object detections or segmentation masks.
 - **Explicit review and provenance:** accept/reject each match; exports include model ID, similarity score (not probability), source, imagery year, review status and sampling limits. The model-search layer is separate from manual annotations and ALKIS reference footprints.
 
 - **Manual Annotation Studio (v0.6):** draw bounding boxes or polygon labels directly on the Berlin orthophoto, assign classes (vehicles, solar panels, possible waste sites, buildings, vegetation, water or custom), review each label, and save locally.
@@ -96,13 +97,13 @@ OSM buildings returned by a bounding-box query may partly lie beyond the selecte
 1. Open the deployed site and choose **Object Detection Studio** in the left workspace navigation. This is a dedicated view; the original GeoAI Explorer remains available.
 2. Choose a class (solar panels, vehicles, suspected waste sites, buildings, vegetation, or another category).
 3. Click **Draw example box** and click two opposite corners around one object **within the yellow aerial-image boundary**. Alternatively select an existing manual annotation from v0.6.
-4. Set the minimum cosine-similarity threshold, then click **Find Similar Objects**. The model is downloaded to the browser on first use (requires access to Hugging Face) and may take a while to initialize, especially on CPU-only computers.
-5. The browser compares a bounded maximum of 64 multi-scale image windows with the exemplar using DINOv2 visual embeddings. Open the candidate list to review, accept or reject suggestions.
-6. Export georeferenced result boxes in GeoJSON. The score is a cosine similarity, **not a calibrated probability of detection**; the results are **not** automatically imported as manual ground truth.
+4. Choose a **Search method**: Fast image matching for full-orthophoto local pattern matching, or DINOv2 visual embeddings for an optional model-assisted pilot. Adjust the corresponding score threshold and click **Find Similar Objects**. DINOv2 weights are downloaded to the browser on first use (requires access to Hugging Face).
+5. The image-matching mode scans the cached imagery using multi-scale pixel brightness-pattern correlations. DINOv2 compares a bounded maximum of 64 sampled image windows using pretrained embeddings. Both display comparisons examined, top observed score, warnings and any proposed boxes directly in the search panel. Open the candidate list to review, accept or reject suggestions.
+6. Export georeferenced result boxes in GeoJSON. Scores are either brightness-pattern correlation (fast mode) or embedding cosine similarity (DINOv2), **not calibrated probabilities of detection**; the results are **not** automatically imported as manual ground truth.
 
-**Scope and limitations:** v0.7 is a *model-assisted visual similarity pilot*, not an instance segmentation system. There is no live retraining, no guaranteed class-specific recognition, no SAM 3 integration, and no exhaustive search of all objects. Small cars and rooftop panels may be too small at the current 20 cm/pixel image resolution to yield distinctive embeddings. False positives and missed objects are expected; always review results manually. A scan runs locally in the visitor's browser on the downloaded 1024 × 1024 Berlin image, not on the remote Overpass service, and cannot process arbitrary cities until imagery services and bounded inference have been integrated. The pretrained source model [facebook/dinov2-small](https://huggingface.co/facebook/dinov2-small) is Apache-2.0; verify the source dataset and model usage policies before commercial deployment. ONNX-quantized weights are supplied by [Xenova/dinov2-small](https://huggingface.co/Xenova/dinov2-small).
+**Scope and limitations:** v0.7.1 provides a local pattern-matching method alongside a pretrained-model visual similarity pilot; neither is an instance segmentation system. There is no live retraining, no guaranteed class-specific recognition, no SAM 3 integration, and no exhaustive search of all objects. Small cars and rooftop panels may be too small at the current 20 cm/pixel image resolution to yield distinctive embeddings. False positives and missed objects are expected; always review results manually. A scan runs locally in the visitor's browser on the downloaded 1024 × 1024 Berlin image, not on the remote Overpass service, and cannot process arbitrary cities until imagery services and bounded inference have been integrated. The pretrained source model [facebook/dinov2-small](https://huggingface.co/facebook/dinov2-small) is Apache-2.0; verify the source dataset and model usage policies before commercial deployment. ONNX-quantized weights are supplied by [Xenova/dinov2-small](https://huggingface.co/Xenova/dinov2-small).
 
-**Performance and privacy:** the user-initiated first run downloads model assets from Hugging Face. Cropped image windows are processed on-device rather than uploaded to an inference API. Model downloads can fail or be blocked by browser/network restrictions; slower CPUs can take a long time per scan. Clicking cancel takes effect after the current model operation. The similarity prototype is not a production SLA-backed detector; use a separately provisioned backend and a validated detection or segmentation model for demanding workloads.
+**Performance and privacy:** only DINOv2 mode downloads model assets from Hugging Face on its first run. Fast image matching operates directly on the cached aerial photograph. Cropped image windows are processed on-device rather than uploaded to an inference API. Model downloads can fail or be blocked by browser/network restrictions; slower CPUs can take a long time per scan. Clicking cancel takes effect after the current model operation. These search prototypes are not production SLA-backed detectors; use a separately provisioned backend and a validated detection or segmentation model for demanding workloads.
 
 ## Manual Annotation Studio (v0.6)
 
@@ -122,6 +123,8 @@ OSM buildings returned by a bounding-box query may partly lie beyond the selecte
 src/App.tsx                  Explorer navigation, dashboard, filters and AOI workflow
 src/ObjectDetectionStudio.tsx  Dedicated visual example/search/review interface
 src/services/similarity.ts    Image-window sampling, cosine similarity, NMS and geospatial export
+src/services/templateMatch.ts Browser-local sampled pixel-template matching and diagnostics
+tests/templateMatch.test.mjs  Synthetic-image retrieval, cancellation and error tests
 src/services/exemplarModel.ts Pretrained browser inference adapter (on-demand)
 tests/similarity.test.mjs     Visual search geometry, scoring, export and limits
 src/GeoMap.tsx               MapLibre map, feature inspection and rectangle drawing

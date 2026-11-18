@@ -59,3 +59,12 @@ test('exports real candidate provenance, review status, model identity and analy
   assert.equal(exported.metadata.windows_evaluated,35);
   assert.match(text,/unvalidated exploratory/);
 });
+
+test('pixel-template exports do not claim neural-network inference',()=>{
+  const file=exportDetections([{id:'pixel-1',box:example,similarity:.72,className:'vehicle',review:'unreviewed'}],example,bbox,1024,1024,2025,1000,'template');
+  const out=JSON.parse(file);
+  assert.equal(out.metadata.search_engine,'template');
+  assert.equal(out.metadata.model,'none');
+  assert.equal(out.features[0].properties.origin,'image_template_candidate');
+  assert.match(out.metadata.method,/pixel-template/);
+});

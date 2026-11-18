@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.7.1] — 2026-11-18
+
+### Improved
+- Added a browser-local, multi-scale pixel-template matcher that searches the complete cached orthophoto and needs no model download. This is **classical image matching**, not a learned object detector.
+- Preserved DINOv2 embeddings as an explicitly selectable exploratory search method (up to 64 sampled candidate windows).
+- Displayed progress, model/download errors, the number of comparisons, the best observed score and threshold outcome directly beside the search controls.
+- Exported algorithm-specific provenance to distinguish pixel matching from pretrained-model results.
+- Added deterministic synthetic-image tests that verify repeated-pattern retrieval, empty outcomes and cancellation.
+
+### Limitations
+- Both methods produce unvalidated candidate bounding boxes, not complete object instance detection or segmentation masks.
+- Local template matching is sensitive to viewpoint, orientation, scale and appearance. DINOv2 scanning is sparse and may miss small objects.
+- The full Vite production build and real browser inference require verification after deployment.
+
 ## [0.7.0] — 2026-11-18
 
 ### Added
