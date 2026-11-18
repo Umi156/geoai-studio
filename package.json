@@ -1,20 +1,21 @@
 {
   "name": "geoai-studio",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.7.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test:geo": "node --experimental-strip-types --test tests/aoi.test.mjs tests/spatial.test.mjs tests/annotations.test.mjs"
+    "test:geo": "node --experimental-strip-types --test tests/aoi.test.mjs tests/spatial.test.mjs tests/annotations.test.mjs tests/similarity.test.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
     "maplibre-gl": "^5.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "recharts": "^2.15.0"
+    "recharts": "^2.15.0",
+    "@huggingface/transformers": "3.8.1"
   },
   "devDependencies": {
     "@types/react": "^18.3.18",

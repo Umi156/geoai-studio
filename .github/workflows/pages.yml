@@ -30,7 +30,7 @@ jobs:
           node-version: '22'
       - name: Install UI dependencies
         run: npm install --no-audit --no-fund
-      - name: Verify AOI geospatial logic
+      - name: Verify frontend geospatial and visual-search logic
         run: npm run test:geo
       - name: Build website
         run: npm run build

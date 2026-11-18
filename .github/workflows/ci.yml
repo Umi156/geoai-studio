@@ -22,7 +22,7 @@ jobs:
           node-version: '22'
       - name: Install UI packages
         run: npm install --no-audit --no-fund
-      - name: AOI tests
+      - name: Geospatial and visual-search tests
         run: npm run test:geo
       - name: TypeScript and production build
         run: npm run build

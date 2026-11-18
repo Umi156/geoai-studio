@@ -1,6 +1,6 @@
 # GeoAI Studio
 
-**Interactive geospatial intelligence workspace — v0.6.0**
+**Interactive geospatial intelligence workspace — v0.7.0**
 
 [![Website](https://img.shields.io/badge/Live%20demo-GitHub%20Pages-0ea5e9)](https://umi156.github.io/geoai-studio/)
 
@@ -35,6 +35,12 @@ Badges link to the relevant tool documentation. The stack is reviewed whenever i
 [![GitHub Pages](https://img.shields.io/badge/GitHub_Pages-181717?style=for-the-badge&logo=github&logoColor=white)](https://docs.github.com/en/pages)
 [![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 
+**Browser-side visual search (on-demand)**
+
+[![Transformers.js](https://img.shields.io/badge/Transformers.js-FFD21E?style=for-the-badge&logo=huggingface&logoColor=black)](https://huggingface.co/docs/transformers.js/index)
+[![DINOv2](https://img.shields.io/badge/DINOv2-7C3AED?style=for-the-badge)](https://huggingface.co/Xenova/dinov2-small)
+[![ONNX Runtime Web](https://img.shields.io/badge/ONNX_Runtime_Web-005CED?style=for-the-badge)](https://onnxruntime.ai/docs/tutorials/web/)
+
 **Optional offline model processing** (not executed by GitHub Pages)
 
 [![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)](https://pytorch.org/)
@@ -43,8 +49,12 @@ Badges link to the relevant tool documentation. The stack is reviewed whenever i
 
 ## Features
 
+- **Object Detection Studio (v0.7):** separate full-width MapLibre workspace for selecting an example on the existing Berlin orthophoto, initiating image-embedding similarity search, reviewing candidates and exporting GeoJSON.
+- **Pretrained visual embeddings:** DINOv2-small through Transformers.js / ONNX Runtime Web; the browser fetches the public model weights on first use and scans a maximum of 64 multi-scale image windows. The results are *proposals*, **not** exhaustive object detections or segmentation masks.
+- **Explicit review and provenance:** accept/reject each match; exports include model ID, similarity score (not probability), source, imagery year, review status and sampling limits. The model-search layer is separate from manual annotations and ALKIS reference footprints.
+
 - **Manual Annotation Studio (v0.6):** draw bounding boxes or polygon labels directly on the Berlin orthophoto, assign classes (vehicles, solar panels, possible waste sites, buildings, vegetation, water or custom), review each label, and save locally.
-- **Interoperable annotations:** export or import a validated GeoJSON FeatureCollection with WGS84 geometry, imagery extent/year, creator origin, review state and source attribution. This release does **not** perform find-similar inference or model training.
+- **Interoperable annotations:** export or import a validated GeoJSON FeatureCollection with WGS84 geometry, imagery extent/year, creator origin, review state and source attribution. Annotations are separate from the v0.7 experimental model-search candidates; no fine-tuning is performed.
 
 - Interactive aerial map, with a visible boundary identifying the limited Berlin orthophoto coverage.
 - Official ALKIS Berlin building footprints, area calculations, click-to-inspect, hover tooltips, filters and GeoJSON export.
@@ -81,6 +91,19 @@ OSM buildings returned by a bounding-box query may partly lie beyond the selecte
 
 **Safety limits:** AOI ≤ 0.5 km² and ≤ 1 km along either side; up to 5 MB response data and 2,500 OSM features. The browser sends the selected geographic coordinates directly to the third-party Overpass API only when the visitor clicks Fetch; there is no automatic request on pan or zoom. A failed live request does not replace the working Berlin dataset.
 
+## Object Detection Studio (v0.7)
+
+1. Open the deployed site and choose **Object Detection Studio** in the left workspace navigation. This is a dedicated view; the original GeoAI Explorer remains available.
+2. Choose a class (solar panels, vehicles, suspected waste sites, buildings, vegetation, or another category).
+3. Click **Draw example box** and click two opposite corners around one object **within the yellow aerial-image boundary**. Alternatively select an existing manual annotation from v0.6.
+4. Set the minimum cosine-similarity threshold, then click **Find Similar Objects**. The model is downloaded to the browser on first use (requires access to Hugging Face) and may take a while to initialize, especially on CPU-only computers.
+5. The browser compares a bounded maximum of 64 multi-scale image windows with the exemplar using DINOv2 visual embeddings. Open the candidate list to review, accept or reject suggestions.
+6. Export georeferenced result boxes in GeoJSON. The score is a cosine similarity, **not a calibrated probability of detection**; the results are **not** automatically imported as manual ground truth.
+
+**Scope and limitations:** v0.7 is a *model-assisted visual similarity pilot*, not an instance segmentation system. There is no live retraining, no guaranteed class-specific recognition, no SAM 3 integration, and no exhaustive search of all objects. Small cars and rooftop panels may be too small at the current 20 cm/pixel image resolution to yield distinctive embeddings. False positives and missed objects are expected; always review results manually. A scan runs locally in the visitor's browser on the downloaded 1024 × 1024 Berlin image, not on the remote Overpass service, and cannot process arbitrary cities until imagery services and bounded inference have been integrated. The pretrained source model [facebook/dinov2-small](https://huggingface.co/facebook/dinov2-small) is Apache-2.0; verify the source dataset and model usage policies before commercial deployment. ONNX-quantized weights are supplied by [Xenova/dinov2-small](https://huggingface.co/Xenova/dinov2-small).
+
+**Performance and privacy:** the user-initiated first run downloads model assets from Hugging Face. Cropped image windows are processed on-device rather than uploaded to an inference API. Model downloads can fail or be blocked by browser/network restrictions; slower CPUs can take a long time per scan. Clicking cancel takes effect after the current model operation. The similarity prototype is not a production SLA-backed detector; use a separately provisioned backend and a validated detection or segmentation model for demanding workloads.
+
 ## Manual Annotation Studio (v0.6)
 
 1. Load the Berlin reference map and keep **Aerial imagery** enabled.
@@ -91,12 +114,16 @@ OSM buildings returned by a bounding-box query may partly lie beyond the selecte
 
 **Persistence and scope:** Annotations are stored only in the browser's `localStorage`, separated by imagery year and geographic extent; they are not synchronized to an account or server. Clear browser data or change devices and the local data may disappear. Export a backup after each annotation session. The current Berlin imagery is only 200 × 200 m; outside that region, annotations are blocked rather than pretending higher-resolution imagery is available.
 
-**Data integrity:** All manually drawn shapes are stored as GeoJSON polygons in EPSG:4326, with `origin: manual_annotation`, a class, a review state and a timestamp. Unreviewed and accepted annotations are **user labels, not independently verified ground truth**. Future model predictions must be stored as a separate dataset and cannot be silently mixed with annotations. No automatic find-similar detection is available in v0.6.
+**Data integrity:** All manually drawn shapes are stored as GeoJSON polygons in EPSG:4326, with `origin: manual_annotation`, a class, a review state and a timestamp. Unreviewed and accepted annotations are **user labels, not independently verified ground truth**. Future model predictions must be stored as a separate dataset and cannot be silently mixed with annotations. The annotation tools in v0.6 remain manual. The separate v0.7 Object Detection Studio adds an exploratory model-driven similarity shortlist, not dense object detection or online training.
 
 ## Source layout
 
 ```text
-src/App.tsx                  Dashboard, filters and AOI workflow
+src/App.tsx                  Explorer navigation, dashboard, filters and AOI workflow
+src/ObjectDetectionStudio.tsx  Dedicated visual example/search/review interface
+src/services/similarity.ts    Image-window sampling, cosine similarity, NMS and geospatial export
+src/services/exemplarModel.ts Pretrained browser inference adapter (on-demand)
+tests/similarity.test.mjs     Visual search geometry, scoring, export and limits
 src/GeoMap.tsx               MapLibre map, feature inspection and rectangle drawing
 src/services/overpass.ts     Bounded live OSM service adapter and geometry utilities
 src/types.ts                 Data types
@@ -117,7 +144,7 @@ tests/test_fetch_berlin.py   Offline Python GIS tests
 
 ## Development on Windows 10
 
-Your local machine needs no GPU or Docker. Python 3.12 and Node.js/npm are sufficient. Use a dedicated folder rather than `C:\Windows\System32`.
+The core dashboard needs no GPU or Docker. Python 3.12 and Node.js/npm are sufficient. Visual embedding search runs through ONNX Runtime Web, and will be slower on older CPU-only devices. Use a dedicated folder rather than `C:\Windows\System32`.
 
 ```bat
 py -3.12 -m venv .venv
@@ -147,8 +174,8 @@ On pushes to `main`, GitHub Actions tests the Python GIS utilities, retrieves Be
 ## Limitations and engineering roadmap
 
 - Live AOI queries depend on a public, third-party Overpass API. **Not suitable as a commercial-production dependency without a separately operated or contracted service.**
-- GitHub Pages is a static host. It does not execute FastAPI, Python processing or neural-network inference.
-- Model inference is optional and performed offline. No predicted geometry is bundled, downloaded automatically or computed in the GitHub Pages browser. Solar detection, waste detection, authentication and persistent user projects are not yet implemented.
+- GitHub Pages is a static host. It does not execute FastAPI, server-side Python processing or model training; the optional v0.7 browser-only visual encoder runs on the visitor device.
+- The optional building-footprint segmentation workflow runs offline. The separate v0.7 visual-search preview performs limited image-embedding inference in the GitHub Pages browser after a user action, but does not predict segmentation masks. Validated solar/waste object detectors, online model training, authentication and persistent user projects are not yet implemented.
 - Larger areas and reliable AI processing will require a backend, quotas, provenance, caching and an appropriate GPU strategy.
 - Library licenses, basemap terms and dataset usage conditions should be rechecked before commercializing.
 

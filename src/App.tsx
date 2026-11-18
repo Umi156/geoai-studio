@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Activity, ArrowDownToLine, BarChart3, Building2, Check, ChevronDown, CircleHelp, Database, ExternalLink, Layers, Leaf, Map as MapIcon, Maximize2, Menu, MousePointer2, RotateCcw, Search, ShieldCheck, SlidersHorizontal, Sun, X, Pencil, Square, Pentagon, Upload, Trash2, CheckCircle2, XCircle, Save } from 'lucide-react';
+import { Activity, ArrowDownToLine, BarChart3, Building2, Check, ChevronDown, CircleHelp, Database, ExternalLink, Layers, Leaf, Map as MapIcon, Maximize2, Menu, Crosshair, MousePointer2, RotateCcw, Search, ShieldCheck, SlidersHorizontal, Sun, X, Pencil, Square, Pentagon, Upload, Trash2, CheckCircle2, XCircle, Save } from 'lucide-react';
 import GeoMap from './GeoMap';
+import ObjectDetectionStudio from './ObjectDetectionStudio';
 import type { BuildingCollection, BuildingFeature, DatasetMeta } from './types';
 import { fetchOsmBuildings, inspectAoi, OVERPASS_SERVICES } from './services/overpass';
 import type { AoiBounds, OverpassProvider } from './services/overpass';
@@ -58,6 +59,7 @@ export default function App() {
   const requestRef = useRef<AbortController | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [module, setModule] = useState<ModuleName>('buildings');
+  const [workspace, setWorkspace] = useState<'explorer' | 'detection'>('detection');
   const [ortho, setOrtho] = useState(true);
   const [footprints, setFootprints] = useState(true);
   const [opacity, setOpacity] = useState(0.96);
@@ -265,11 +267,12 @@ export default function App() {
         <button className="icon-btn mobile-only close-side" onClick={() => setSidebar(false)} aria-label="Close menu"><X size={19}/></button>
       </div>
       <div className="nav-label">WORKSPACE</div>
-      <button className="nav-main active"><MapIcon size={17}/> GeoAI Explorer <span className="nav-dot"/></button>
+      <button className={`nav-main ${workspace === 'explorer' ? 'active' : ''}`} onClick={() => { setWorkspace('explorer'); setSidebar(false); }}><MapIcon size={17}/> GeoAI Explorer {workspace === 'explorer' && <span className="nav-dot"/>}</button>
+      <button className={`nav-main nav-detection ${workspace === 'detection' ? 'active' : ''}`} onClick={() => { setWorkspace('detection'); setSidebar(false); }}><Crosshair size={17}/> Object Detection Studio {workspace === 'detection' && <span className="nav-dot"/>}</button>
       <div className="source-row"><div className="source-status annotation-source"/><span><strong>Annotation workspace</strong><small>Manual labels · {annotations.length} saved locally</small></span></div>
       <div className="nav-label second">APPLICATIONS</div>
       <div className="modules">
-        {modules.map(m => <button key={m.id} className={`module-btn ${module === m.id ? 'chosen' : ''}`} onClick={() => { setModule(m.id); setSelected(null); setSidebar(false); }}>
+        {modules.map(m => <button key={m.id} className={`module-btn ${module === m.id ? 'chosen' : ''}`} onClick={() => { setWorkspace('explorer'); setModule(m.id); setSelected(null); setSidebar(false); }}>
           <m.icon size={18}/><span><strong>{m.title}</strong><small>{m.subtitle}</small></span>{!m.ready && <em>SOON</em>}
         </button>)}
       </div>
@@ -280,16 +283,17 @@ export default function App() {
       <div className="source-row"><div className="source-status prediction-status"/><span><strong>Building segmentation</strong><small>{predictions ? 'Predictions available · unvalidated' : 'Offline model stage · optional'}</small></span></div>
       <div className="sidebar-bottom">
         <div className="groundtruth"><ShieldCheck size={17}/><div><strong>{sourceMode === 'osm' ? 'Community map data' : 'Official reference data'}</strong><p>{sourceMode === 'osm' ? 'OpenStreetMap contributors · not AI inference.' : 'Berlin ALKIS footprints · not AI inference.'}</p></div></div>
-        <div className="version">GEOAI STUDIO <span>v0.6.0</span></div>
+        <div className="version">GEOAI STUDIO <span>v0.7.0</span></div>
       </div>
     </aside>
 
     <div className="main-column">
       <header className="topbar">
-        <div className="top-left"><button className="icon-btn mobile-only" onClick={() => setSidebar(true)} aria-label="Open menu"><Menu size={20}/></button><span className="crumb">Workspace</span><ChevronDown size={13}/><span className="crumb-active">{isOsm ? 'Live AOI Explorer' : 'Berlin Urban Explorer'}</span></div>
+        <div className="top-left"><button className="icon-btn mobile-only" onClick={() => setSidebar(true)} aria-label="Open menu"><Menu size={20}/></button><span className="crumb">Workspace</span><ChevronDown size={13}/><span className="crumb-active">{workspace === 'detection' ? 'Object Detection Studio' : isOsm ? 'Live AOI Explorer' : 'Berlin Urban Explorer'}</span></div>
         <div className="top-actions"><span className="connection"><span/> PUBLIC DATA</span><button className="icon-btn" title="About this demonstration" onClick={() => setShowInfo(true)}><CircleHelp size={19}/></button><div className="avatar">G</div></div>
       </header>
-      <main className="content">
+      <main className={workspace === 'detection' ? 'content detection-content' : 'content'}>
+        {workspace === 'detection' ? <ObjectDetectionStudio meta={meta} annotations={annotations}/> : <>
         <div className="page-head"><div><div className="eyebrow"><Activity size={13}/> GEOINTELLIGENCE / {active.id.toUpperCase()}</div><h1>{active.title}</h1><p>{active.subtitle} · {isOsm ? 'OpenStreetMap' : 'Berlin, Germany'} · {scopeLabel}</p></div><div className="export-actions"><button className="outline-btn" title={`Export ${filtered.length} features from ${scopeLabel.toLowerCase()}`} onClick={() => exportGeoJSON(visible ? filtered : [], sourceMode, spatialScope)} disabled={!visible || filtered.length === 0}><ArrowDownToLine size={16}/> GeoJSON</button><button className="outline-btn" title="Download the same scoped features as CSV" onClick={() => downloadText(buildingCsv(filtered, sourceLabel), 'geoai_buildings.csv', 'text/csv;charset=utf-8')} disabled={!visible || filtered.length === 0}><ArrowDownToLine size={16}/> CSV</button></div></div>
         <div className="stat-grid">
           <div className="stat-card"><div className="stat-title">Mapped buildings <Building2 size={17}/></div><strong>{visible ? fmt(filtered.length) : '—'}</strong><div className="stat-desc"><span className="stat-up">{isOsm ? 'OSM' : 'Reference'}</span> {scopeLabel} · matching polygons</div></div>
@@ -394,8 +398,9 @@ export default function App() {
           </aside>
         </div>
         <footer className="footer"><span>© GeoAI Studio · Educational geospatial research</span><span>Berlin imagery/ALKIS © Geoportal Berlin · OSM <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© contributors (ODbL)</a> · Basemap © OpenFreeMap / OSM</span></footer>
+        </>}
       </main>
     </div>
-    {showInfo && <div className="modal-overlay" onClick={() => setShowInfo(false)}><div className="modal" onClick={e => e.stopPropagation()}><button className="modal-close" onClick={() => setShowInfo(false)}><X size={20}/></button><div className="eyebrow">DATA PROVENANCE</div><h2>Real geospatial data. No simulated AI results.</h2><p>The default demonstration loads a small official Berlin orthophoto and official ALKIS building footprints acquired by Python during deployment. The dashed image border is the full downloaded extent; no additional orthophotos are downloaded on pan or zoom. Live AOI discovery separately queries building ways mapped by OpenStreetMap contributors through a public Overpass API endpoint. OSM coverage is not complete, its polygon areas are approximate, and the public API can be unavailable or rate limited. Neither dataset constitutes AI predictions. v0.6 spatial analysis and manual annotations work locally against the current loaded features, and sums full footprint areas for polygons intersecting an AOI or map viewport.</p><div className="modal-row"><strong>Imagery</strong><span>DOP20RGBI 2025 · Geoportal Berlin WMS</span></div><div className="modal-row"><strong>Buildings</strong><span>ALKIS Berlin Gebäude · Geoportal Berlin WFS</span></div><div className="modal-row"><strong>On-demand buildings</strong><span>OpenStreetMap · Overpass public endpoint · ODbL 1.0</span></div><div className="modal-row"><strong>Coordinate system</strong><span>ETRS89 / UTM zone 33N (EPSG:25833)</span></div><div className="modal-row"><strong>License</strong><span>dl-de/zero-2-0</span></div><p className="modal-note">ALKIS building areas are measured in UTM zone 33N. OSM building areas use a small-area spherical approximation. Both are mapping data, not model performance or AI confidence scores. Where available, the separate orange layer contains independently inferred model polygons, which are not validated for Berlin.</p><button className="primary-btn" onClick={() => setShowInfo(false)}><Check size={16}/> Understood</button></div></div>}
+    {showInfo && <div className="modal-overlay" onClick={() => setShowInfo(false)}><div className="modal" onClick={e => e.stopPropagation()}><button className="modal-close" onClick={() => setShowInfo(false)}><X size={20}/></button><div className="eyebrow">DATA PROVENANCE</div><h2>Real geospatial data. No simulated AI results.</h2><p>The default demonstration loads a small official Berlin orthophoto and official ALKIS building footprints acquired by Python during deployment. The dashed image border is the full downloaded extent; no additional orthophotos are downloaded on pan or zoom. Live AOI discovery separately queries building ways mapped by OpenStreetMap contributors through a public Overpass API endpoint. OSM coverage is not complete, its polygon areas are approximate, and the public API can be unavailable or rate limited. Neither dataset constitutes AI predictions. v0.7 performs bounded browser-side visual similarity scoring only when requested; v0.6 annotations and GIS spatial analytics work independently of the live OSM service. Building area sums use full feature footprints for intersecting polygons.</p><div className="modal-row"><strong>Imagery</strong><span>DOP20RGBI 2025 · Geoportal Berlin WMS</span></div><div className="modal-row"><strong>Buildings</strong><span>ALKIS Berlin Gebäude · Geoportal Berlin WFS</span></div><div className="modal-row"><strong>On-demand buildings</strong><span>OpenStreetMap · Overpass public endpoint · ODbL 1.0</span></div><div className="modal-row"><strong>Coordinate system</strong><span>ETRS89 / UTM zone 33N (EPSG:25833)</span></div><div className="modal-row"><strong>License</strong><span>dl-de/zero-2-0</span></div><p className="modal-note">ALKIS building areas are measured in UTM zone 33N. OSM building areas use a small-area spherical approximation. Both are mapping data, not model performance or AI confidence scores. Where available, the separate orange layer contains independently inferred model polygons, which are not validated for Berlin.</p><button className="primary-btn" onClick={() => setShowInfo(false)}><Check size={16}/> Understood</button></div></div>}
   </div>;
 }

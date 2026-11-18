@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.7.0] — 2026-11-18
+
+### Added
+- Dedicated full-width **Object Detection Studio** with an exemplar-box prompt, object-class selection, on-demand browser image-embedding similarity scan, review controls, and georeferenced GeoJSON export.
+- An on-demand DINOv2-small / ONNX Runtime Web adapter that compares at most 64 bounded image crops, applies cosine similarity and non-maximum suppression, and does not manufacture detection results when model execution fails.
+- Candidate-review states and separate provenance from ALKIS footprints and manual v0.6 annotations.
+- Explicit image-source boundaries, scan progress, cancel control, model download notes, and responsive workspace layout.
+- Updated public README with visual-search usage instructions and technology badges for Transformers.js, DINOv2, and ONNX Runtime Web.
+- Offline visual search tests for geometry transforms, candidate budgets, similarity scores, suppression, and export metadata.
+
+### Limitations
+- DINOv2 performs an exploratory **visual similarity proposal** search, not pixel segmentation, online retraining, or exhaustive detection. Accuracy, browser compatibility, download size, and scan latency require live testing.
+- On-demand model downloads require external connectivity; no search inference occurs in GitHub Actions.
+- Existing Berlin imagery and GIS analytics remain available. No private internal working files are included.
+
 ## [0.6.0] — 2026-11-18
 
 ### Added
