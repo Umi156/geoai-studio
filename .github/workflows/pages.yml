@@ -29,7 +29,7 @@ jobs:
         with:
           node-version: '22'
       - name: Install UI dependencies
-        run: npm install --no-audit --no-fund
+        run: npm install --no-audit --no-fund --onnxruntime-node-install-cuda=skip
       - name: Verify frontend geospatial and visual-search logic
         run: npm run test:geo
       - name: Build website
