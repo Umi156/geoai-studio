@@ -29,6 +29,8 @@ jobs:
         with:
           node-version: '22'
       - name: Install UI dependencies
+        env:
+          ONNXRUNTIME_NODE_INSTALL_CUDA: skip
         run: npm install --no-audit --no-fund
       - name: Verify frontend geospatial and visual-search logic
         run: npm run test:geo
